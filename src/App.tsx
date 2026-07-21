@@ -202,22 +202,20 @@ function App() {
   const lastFixRef = useRef<PositionFix | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const depthAbortRef = useRef<number | null>(null);
+  const orientationHeadingRef = useRef<number | null>(null);
   const [fix, setFix] = useState<PositionFix | null>(null);
   const [depth, setDepth] = useState<DepthState>(DEFAULT_DEPTH_STATE);
-  const [status, setStatus] = useState("Tap Start to request location");
+  const [status, setStatus] = useState("Requesting location");
   const [tracking, setTracking] = useState(false);
   const [follow, setFollow] = useState(true);
   const [chartVisible, setChartVisible] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [showTopbar, setShowTopbar] = useState(true);
   const [showReadouts, setShowReadouts] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const [showOwnship, setShowOwnship] = useState(true);
   const [showAccuracyRing, setShowAccuracyRing] = useState(true);
   const [showNotice, setShowNotice] = useState(true);
-  const [orientationHeading, setOrientationHeading] = useState<number | null>(
-    null,
-  );
 
   const canAskOrientation =
     typeof window !== "undefined" &&
@@ -401,7 +399,7 @@ function App() {
           : typeof event.alpha === "number"
             ? normalizeBearing(360 - event.alpha)
             : null;
-      setOrientationHeading(heading);
+      orientationHeadingRef.current = heading;
     };
 
     window.addEventListener("deviceorientation", handleOrientation, true);
@@ -409,7 +407,7 @@ function App() {
       window.removeEventListener("deviceorientation", handleOrientation, true);
   }, []);
 
-  const startTracking = async () => {
+  const startTracking = useCallback(async (requestCompass = true) => {
     if (!window.isSecureContext) {
       setStatus("Location requires HTTPS or localhost");
       return;
@@ -420,7 +418,7 @@ function App() {
       return;
     }
 
-    if (canAskOrientation) {
+    if (requestCompass && canAskOrientation) {
       try {
         await (
           DeviceOrientationEvent as unknown as {
@@ -463,7 +461,9 @@ function App() {
             ? bearingDegrees(previous, coords.latitude, coords.longitude)
             : null;
         const compassHeading =
-          speedKnots !== null && speedKnots < 0.8 ? orientationHeading : null;
+          speedKnots !== null && speedKnots < 0.8
+            ? orientationHeadingRef.current
+            : null;
         const heading = gpsHeading ?? calculatedHeading ?? compassHeading;
         const headingSource = gpsHeading !== null
           ? "gps"
@@ -497,7 +497,11 @@ function App() {
         timeout: 15000,
       },
     );
-  };
+  }, [canAskOrientation]);
+
+  useEffect(() => {
+    void startTracking(false);
+  }, [startTracking]);
 
   const readouts = useMemo(
     () => [
@@ -658,7 +662,11 @@ function App() {
 
       {showControls && (
         <section className="controls" aria-label="Map controls">
-        <button type="button" onClick={startTracking} title="Start tracking">
+        <button
+          type="button"
+          onClick={() => startTracking()}
+          title="Start tracking"
+        >
           <LocateFixed size={20} />
           <span>Start</span>
         </button>

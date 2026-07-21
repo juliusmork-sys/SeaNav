@@ -1,0 +1,2 @@
+# SeaNav
+Sea navigation app

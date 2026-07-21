@@ -538,7 +538,7 @@ function App() {
       onChange: setShowReadouts,
     },
     {
-      label: "Bottom controls",
+      label: "Nav controls",
       checked: showControls,
       onChange: setShowControls,
     },

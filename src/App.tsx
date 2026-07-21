@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { Map } from "maplibre-gl";
 import {
   Anchor,
-  ChevronLeft,
-  ChevronRight,
   Compass,
   Crosshair,
   Layers,
@@ -13,6 +11,7 @@ import {
   Satellite,
   ShieldAlert,
   SlidersHorizontal,
+  X,
   Waves,
 } from "lucide-react";
 
@@ -205,11 +204,11 @@ function App() {
   const orientationHeadingRef = useRef<number | null>(null);
   const [fix, setFix] = useState<PositionFix | null>(null);
   const [depth, setDepth] = useState<DepthState>(DEFAULT_DEPTH_STATE);
-  const [status, setStatus] = useState("Requesting location");
   const [tracking, setTracking] = useState(false);
   const [follow, setFollow] = useState(true);
   const [chartVisible, setChartVisible] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [showTopbar, setShowTopbar] = useState(true);
   const [showReadouts, setShowReadouts] = useState(true);
   const [showControls, setShowControls] = useState(true);
@@ -409,12 +408,12 @@ function App() {
 
   const startTracking = useCallback(async (requestCompass = true) => {
     if (!window.isSecureContext) {
-      setStatus("Location requires HTTPS or localhost");
+      setTracking(false);
       return;
     }
 
     if (!("geolocation" in navigator)) {
-      setStatus("Geolocation is not available in this browser");
+      setTracking(false);
       return;
     }
 
@@ -430,7 +429,6 @@ function App() {
       }
     }
 
-    setStatus("Waiting for GPS fix");
     setTracking(true);
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -485,11 +483,10 @@ function App() {
 
         lastFixRef.current = nextFix;
         setFix(nextFix);
-        setStatus("Tracking live position");
       },
       (error) => {
         setTracking(false);
-        setStatus(error.message || "Location permission denied");
+        console.warn(error.message || "Location permission denied");
       },
       {
         enableHighAccuracy: true,
@@ -572,37 +569,6 @@ function App() {
     <main className="app-shell">
       <div ref={mapContainer} className="map" aria-label="Navigation map" />
 
-      <aside className={menuOpen ? "side-menu open" : "side-menu"}>
-        <button
-          type="button"
-          className="menu-toggle"
-          onClick={() => setMenuOpen((value) => !value)}
-          title={menuOpen ? "Collapse menu" : "Open menu"}
-          aria-label={menuOpen ? "Collapse menu" : "Open menu"}
-        >
-          {menuOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-        </button>
-
-        <div className="menu-content" aria-hidden={!menuOpen}>
-          <div className="menu-title">
-            <SlidersHorizontal size={19} />
-            <strong>Display</strong>
-          </div>
-          <div className="toggle-list">
-            {toggles.map((item) => (
-              <label className="toggle-row" key={item.label}>
-                <span>{item.label}</span>
-                <input
-                  type="checkbox"
-                  checked={item.checked}
-                  onChange={(event) => item.onChange(event.target.checked)}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-      </aside>
-
       {showTopbar && (
         <section className="topbar" aria-label="Navigation status">
           <div className="brand">
@@ -629,23 +595,32 @@ function App() {
           </p>
 
           <div className="readout-grid">
-            {readouts.map((item) => (
+            {readouts.slice(0, 2).map((item) => (
               <div className="readout" key={item.label}>
                 <span>{item.label}</span>
                 <strong>{item.value}</strong>
               </div>
             ))}
+            <div className="readout motion-readout">
+              <div>
+                <span>Speed</span>
+                <strong>{readouts[2].value}</strong>
+              </div>
+              <div>
+                <span>Heading</span>
+                <strong>{readouts[3].value}</strong>
+              </div>
+            </div>
           </div>
 
           <div className="accuracy">
-            <Crosshair size={18} />
+            <span className="accuracy-target">
+              <Crosshair size={18} />
+              <span className={tracking ? "status-dot active" : "status-dot"} />
+            </span>
             <span className="accuracy-copy">
-              <span className="tracking-state">
-                <span className={tracking ? "status-dot active" : "status-dot"} />
-                {status}
-              </span>
               <span>
-                Accuracy{" "}
+                GPS accuracy{" "}
                 <strong>
                   {fix?.accuracy ? `${Math.round(fix.accuracy)} m` : "--"}
                 </strong>
@@ -653,61 +628,101 @@ function App() {
             </span>
           </div>
 
+          <div className="panel-actions">
+            <button
+              type="button"
+              className={displayOpen ? "active" : ""}
+              onClick={() => setDisplayOpen((value) => !value)}
+              title="Show display options"
+            >
+              {displayOpen ? <X size={18} /> : <SlidersHorizontal size={18} />}
+              <span>Display</span>
+            </button>
+            <button
+              type="button"
+              className={controlsOpen ? "active" : ""}
+              onClick={() => setControlsOpen((value) => !value)}
+              title="Show navigation controls"
+            >
+              {controlsOpen ? <X size={18} /> : <Navigation size={18} />}
+              <span>Nav</span>
+            </button>
+          </div>
+
+          {displayOpen && (
+            <div className="panel-drawer display-drawer">
+              {toggles.map((item) => (
+                <label className="toggle-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <input
+                    type="checkbox"
+                    checked={item.checked}
+                    onChange={(event) => item.onChange(event.target.checked)}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+
+          {controlsOpen && showControls && (
+            <div className="panel-drawer embedded-controls">
+              <button
+                type="button"
+                onClick={() => startTracking()}
+                title="Start tracking"
+              >
+                <LocateFixed size={20} />
+                <span>Start</span>
+              </button>
+              <button
+                type="button"
+                className={follow ? "active" : ""}
+                onClick={() => setFollow((value) => !value)}
+                title={follow ? "Disable follow mode" : "Enable follow mode"}
+              >
+                {follow ? <Navigation size={20} /> : <LocateOff size={20} />}
+                <span>Follow</span>
+              </button>
+              <button
+                type="button"
+                className={chartVisible ? "active" : ""}
+                onClick={() => setChartVisible((value) => !value)}
+                title="Toggle nautical chart"
+              >
+                <Layers size={20} />
+                <span>Chart</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => mapRef.current?.resetNorthPitch({ duration: 500 })}
+                title="Reset bearing"
+              >
+                <Compass size={20} />
+                <span>North</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  mapRef.current?.flyTo({
+                    center: OSLO_FJORD,
+                    zoom: 9,
+                    bearing: 0,
+                  })
+                }
+                title="Return to Oslo Fjord"
+              >
+                <Satellite size={20} />
+                <span>Oslo</span>
+              </button>
+            </div>
+          )}
+
           {showNotice && (
             <div className="notice">
               <ShieldAlert size={17} />
               <span>Situational awareness only. Not certified navigation.</span>
             </div>
           )}
-        </section>
-      )}
-
-      {showControls && (
-        <section className="controls" aria-label="Map controls">
-          <button
-            type="button"
-            onClick={() => startTracking()}
-            title="Start tracking"
-          >
-            <LocateFixed size={20} />
-            <span>Start</span>
-          </button>
-          <button
-            type="button"
-            className={follow ? "active" : ""}
-            onClick={() => setFollow((value) => !value)}
-            title={follow ? "Disable follow mode" : "Enable follow mode"}
-          >
-            {follow ? <Navigation size={20} /> : <LocateOff size={20} />}
-            <span>Follow</span>
-          </button>
-          <button
-            type="button"
-            className={chartVisible ? "active" : ""}
-            onClick={() => setChartVisible((value) => !value)}
-            title="Toggle nautical chart"
-          >
-            <Layers size={20} />
-            <span>Chart</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => mapRef.current?.resetNorthPitch({ duration: 500 })}
-            title="Reset bearing"
-          >
-            <Compass size={20} />
-            <span>North</span>
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              mapRef.current?.flyTo({ center: OSLO_FJORD, zoom: 9, bearing: 0 })
-            }
-            title="Return to Oslo Fjord"
-          >
-            <Satellite size={20} />
-            <span>Oslo</span>
-          </button>
         </section>
       )}
     </main>

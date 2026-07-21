@@ -605,107 +605,109 @@ function App() {
 
       {showTopbar && (
         <section className="topbar" aria-label="Navigation status">
-        <div className="brand">
-          <Anchor size={22} strokeWidth={2.4} />
-          <div>
-            <strong>SeaNav</strong>
-            <span>Oslo Fjord prototype</span>
+          <div className="brand">
+            <Anchor size={22} strokeWidth={2.4} />
+            <div>
+              <strong>SeaNav</strong>
+              <span>Oslo Fjord prototype</span>
+            </div>
           </div>
-        </div>
-        <div className="status-pill">
-          <span className={tracking ? "status-dot active" : "status-dot"} />
-          {status}
-        </div>
         </section>
       )}
 
       {showReadouts && (
         <section className="readout-panel" aria-label="Live navigation data">
-        <div className="primary-depth">
-          <div>
-            <span>Estimated depth</span>
-            <strong>{formatDepth(depth.value)}</strong>
-          </div>
-          <Waves size={28} />
-        </div>
-        <p className={depth.status === "error" ? "warning" : ""}>
-          {depth.message}
-        </p>
-
-        <div className="readout-grid">
-          {readouts.map((item) => (
-            <div className="readout" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
+          <div className="primary-depth">
+            <div>
+              <span>Estimated depth</span>
+              <strong>{formatDepth(depth.value)}</strong>
             </div>
-          ))}
-        </div>
-
-        <div className="accuracy">
-          <Crosshair size={18} />
-          <span>
-            Accuracy{" "}
-            <strong>
-              {fix?.accuracy ? `${Math.round(fix.accuracy)} m` : "--"}
-            </strong>
-          </span>
-        </div>
-
-        {showNotice && (
-          <div className="notice">
-          <ShieldAlert size={17} />
-          <span>Situational awareness only. Not certified navigation.</span>
+            <Waves size={28} />
           </div>
-        )}
+          <p className={depth.status === "error" ? "warning" : ""}>
+            {depth.message}
+          </p>
+
+          <div className="readout-grid">
+            {readouts.map((item) => (
+              <div className="readout" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="accuracy">
+            <Crosshair size={18} />
+            <span className="accuracy-copy">
+              <span className="tracking-state">
+                <span className={tracking ? "status-dot active" : "status-dot"} />
+                {status}
+              </span>
+              <span>
+                Accuracy{" "}
+                <strong>
+                  {fix?.accuracy ? `${Math.round(fix.accuracy)} m` : "--"}
+                </strong>
+              </span>
+            </span>
+          </div>
+
+          {showNotice && (
+            <div className="notice">
+              <ShieldAlert size={17} />
+              <span>Situational awareness only. Not certified navigation.</span>
+            </div>
+          )}
         </section>
       )}
 
       {showControls && (
         <section className="controls" aria-label="Map controls">
-        <button
-          type="button"
-          onClick={() => startTracking()}
-          title="Start tracking"
-        >
-          <LocateFixed size={20} />
-          <span>Start</span>
-        </button>
-        <button
-          type="button"
-          className={follow ? "active" : ""}
-          onClick={() => setFollow((value) => !value)}
-          title={follow ? "Disable follow mode" : "Enable follow mode"}
-        >
-          {follow ? <Navigation size={20} /> : <LocateOff size={20} />}
-          <span>Follow</span>
-        </button>
-        <button
-          type="button"
-          className={chartVisible ? "active" : ""}
-          onClick={() => setChartVisible((value) => !value)}
-          title="Toggle nautical chart"
-        >
-          <Layers size={20} />
-          <span>Chart</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => mapRef.current?.resetNorthPitch({ duration: 500 })}
-          title="Reset bearing"
-        >
-          <Compass size={20} />
-          <span>North</span>
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            mapRef.current?.flyTo({ center: OSLO_FJORD, zoom: 9, bearing: 0 })
-          }
-          title="Return to Oslo Fjord"
-        >
-          <Satellite size={20} />
-          <span>Oslo</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => startTracking()}
+            title="Start tracking"
+          >
+            <LocateFixed size={20} />
+            <span>Start</span>
+          </button>
+          <button
+            type="button"
+            className={follow ? "active" : ""}
+            onClick={() => setFollow((value) => !value)}
+            title={follow ? "Disable follow mode" : "Enable follow mode"}
+          >
+            {follow ? <Navigation size={20} /> : <LocateOff size={20} />}
+            <span>Follow</span>
+          </button>
+          <button
+            type="button"
+            className={chartVisible ? "active" : ""}
+            onClick={() => setChartVisible((value) => !value)}
+            title="Toggle nautical chart"
+          >
+            <Layers size={20} />
+            <span>Chart</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => mapRef.current?.resetNorthPitch({ duration: 500 })}
+            title="Reset bearing"
+          >
+            <Compass size={20} />
+            <span>North</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              mapRef.current?.flyTo({ center: OSLO_FJORD, zoom: 9, bearing: 0 })
+            }
+            title="Return to Oslo Fjord"
+          >
+            <Satellite size={20} />
+            <span>Oslo</span>
+          </button>
         </section>
       )}
     </main>

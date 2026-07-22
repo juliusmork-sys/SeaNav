@@ -2056,7 +2056,7 @@ button {
     left: 0;
     display: grid;
     width: 100vw;
-    min-height: calc(138px + env(safe-area-inset-bottom));
+    min-height: calc(138px + max(env(safe-area-inset-bottom), 18px));
     grid-template-areas:
       "actions motion depth gps"
       "actions motion depth locate";
@@ -2064,7 +2064,7 @@ button {
     grid-template-rows: 1fr 1fr;
     gap: 8px;
     align-items: stretch;
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 10px calc(10px + max(env(safe-area-inset-bottom), 18px));
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
@@ -2161,12 +2161,12 @@ button {
   .accuracy {
     grid-area: gps;
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr);
-    gap: 5px;
+    grid-template-rows: auto 1fr auto;
+    justify-items: center;
+    gap: 3px;
     align-items: center;
     padding: 6px;
-    font-size: 0.56rem;
-    text-align: left;
+    text-align: center;
   }
 
   .accuracy-target,
@@ -2180,19 +2180,18 @@ button {
     height: 6px;
   }
 
-  .accuracy-copy {
-    gap: 0;
-    line-height: 1.05;
+  .accuracy-label {
+    color: #9eb9c1;
+    font-size: 0.54rem;
+    font-weight: 700;
+    line-height: 1;
+    text-transform: uppercase;
   }
 
-  .accuracy-copy > span {
-    display: grid;
-    gap: 2px;
-  }
-
-  .accuracy strong {
+  .accuracy-value {
     display: block;
     font-size: clamp(0.68rem, 3vw, 0.8rem);
+    line-height: 1;
     white-space: nowrap;
   }
 
@@ -2301,7 +2300,6 @@ button {
   }
 
   .accuracy {
-    grid-template-columns: 16px minmax(0, 1fr);
     padding: 5px;
   }
 
@@ -2311,11 +2309,11 @@ button {
     height: 16px;
   }
 
-  .accuracy-copy {
+  .accuracy-label {
     font-size: 0.48rem;
   }
 
-  .accuracy strong {
+  .accuracy-value {
     font-size: 0.62rem;
   }
 }

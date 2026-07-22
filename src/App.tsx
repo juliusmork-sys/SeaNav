@@ -642,18 +642,14 @@ function App() {
           </div>
 
           <div className="accuracy">
+            <span className="accuracy-label">GPS accuracy</span>
             <span className="accuracy-target">
               <Crosshair size={18} />
               <span className={tracking ? "status-dot active" : "status-dot"} />
             </span>
-            <span className="accuracy-copy">
-              <span>
-                GPS accuracy{" "}
-                <strong>
-                  {fix?.accuracy ? `${Math.round(fix.accuracy)} m` : "--"}
-                </strong>
-              </span>
-            </span>
+            <strong className="accuracy-value">
+              {fix?.accuracy ? `${Math.round(fix.accuracy)} m` : "--"}
+            </strong>
           </div>
 
           <button

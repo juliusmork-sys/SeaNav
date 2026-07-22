@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { Map } from "maplibre-gl";
 import {
   Anchor,
-  Compass,
   Crosshair,
   Layers,
   LocateFixed,
@@ -391,13 +390,13 @@ function createBeachIconImageData() {
   context.fill();
   context.stroke();
 
-  context.strokeStyle = "#7c3aed";
+  context.strokeStyle = "#ea580c";
   context.lineWidth = 4.8;
   context.beginPath();
   context.arc(32, 29, 15, Math.PI * 1.04, Math.PI * 1.96);
   context.stroke();
 
-  context.fillStyle = "#7c3aed";
+  context.fillStyle = "#f97316";
   context.beginPath();
   context.moveTo(17, 29);
   context.quadraticCurveTo(22, 18, 32, 15);
@@ -409,14 +408,14 @@ function createBeachIconImageData() {
   context.closePath();
   context.fill();
 
-  context.strokeStyle = "#5b21b6";
+  context.strokeStyle = "#9a3412";
   context.lineWidth = 3.2;
   context.beginPath();
   context.moveTo(32, 16);
   context.lineTo(28, 43);
   context.stroke();
 
-  context.strokeStyle = "#7c3aed";
+  context.strokeStyle = "#ea580c";
   context.lineWidth = 3.2;
   context.beginPath();
   context.moveTo(18, 43);
@@ -869,9 +868,9 @@ function App() {
             ["linear"],
             ["zoom"],
             9,
-            6,
-            14,
             8,
+            14,
+            11,
           ],
           "circle-stroke-color": "rgba(31, 41, 55, 0.28)",
           "circle-stroke-width": 1,
@@ -888,9 +887,9 @@ function App() {
             ["linear"],
             ["zoom"],
             9,
-            0.34,
+            0.5,
             14,
-            0.48,
+            0.68,
           ],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -914,7 +913,7 @@ function App() {
           "text-allow-overlap": false,
         },
         paint: {
-          "text-color": "#4c1d95",
+          "text-color": "#9a3412",
           "text-halo-color": "#ffffff",
           "text-halo-width": 1.6,
         },
@@ -1499,9 +1498,10 @@ function App() {
             {followingLocation ? (
               <span
                 className="map-bearing-icon"
-                style={{ transform: `rotate(${-mapBearing}deg)` }}
+                style={{ transform: `rotate(${mapBearing}deg)` }}
+                aria-hidden="true"
               >
-                <Compass size={20} />
+                <span className="map-bearing-north" />
               </span>
             ) : (
               <LocateFixed size={20} />

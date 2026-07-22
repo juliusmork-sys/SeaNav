@@ -73,7 +73,7 @@ const UI_TEXT = {
     kartverketEstimate: (confidence: string, nearest: number | null) =>
       `Kartverket-estimat (${confidence}${nearest !== null ? `, nærmeste ${nearest} m` : ""})`,
     emodnetFallback: "EMODnet DTM-reserveestimat",
-    brandSubtitle: "Maritim navigasjonsprototype",
+    brandSubtitle: "Maritim navigasjon i Norge",
     navigationMap: "Navigasjonskart",
     navigationStatus: "Navigasjonsstatus",
     liveNavigationData: "Navigasjonsdata",
@@ -131,7 +131,7 @@ const UI_TEXT = {
     kartverketEstimate: (confidence: string, nearest: number | null) =>
       `Kartverket WFS estimate (${confidence}${nearest !== null ? `, nearest ${nearest} m` : ""})`,
     emodnetFallback: "EMODnet DTM fallback estimate",
-    brandSubtitle: "Marine navigation prototype",
+    brandSubtitle: "Maritim navigasjon i Norge",
     navigationMap: "Navigation map",
     navigationStatus: "Navigation status",
     liveNavigationData: "Live navigation data",

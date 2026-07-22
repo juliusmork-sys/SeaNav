@@ -6,8 +6,6 @@ import {
   Crosshair,
   Layers,
   LocateFixed,
-  LocateOff,
-  Navigation,
   Satellite,
   ShieldAlert,
   SlidersHorizontal,
@@ -205,7 +203,8 @@ function App() {
   const [fix, setFix] = useState<PositionFix | null>(null);
   const [depth, setDepth] = useState<DepthState>(DEFAULT_DEPTH_STATE);
   const [tracking, setTracking] = useState(false);
-  const [follow, setFollow] = useState(true);
+  const [followingLocation, setFollowingLocation] = useState(true);
+  const [northUp, setNorthUp] = useState(false);
   const [chartVisible, setChartVisible] = useState(true);
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -232,11 +231,11 @@ function App() {
       const point: [number, number] = [nextFix.longitude, nextFix.latitude];
 
       markerRef.current?.setLngLat(point);
-      if (follow) {
+      if (followingLocation) {
         map.easeTo({
           center: point,
           zoom: Math.max(map.getZoom(), 13),
-          bearing: nextFix.heading ?? map.getBearing(),
+          bearing: northUp ? 0 : (nextFix.heading ?? map.getBearing()),
           duration: 700,
         });
       }
@@ -252,7 +251,7 @@ function App() {
         );
       }
     },
-    [follow],
+    [followingLocation, northUp],
   );
 
   useEffect(() => {
@@ -270,6 +269,7 @@ function App() {
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
+    map.on("dragstart", () => setFollowingLocation(false));
 
     map.on("load", () => {
       map.addSource("sjokart", {
@@ -500,6 +500,33 @@ function App() {
     void startTracking(false);
   }, [startTracking]);
 
+  const recenterOrToggleNorth = () => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!followingLocation) {
+      setFollowingLocation(true);
+      if (fix) {
+        map.easeTo({
+          center: [fix.longitude, fix.latitude],
+          zoom: Math.max(map.getZoom(), 13),
+          bearing: northUp ? 0 : (fix.heading ?? map.getBearing()),
+          duration: 600,
+        });
+      }
+      return;
+    }
+
+    setNorthUp((value) => {
+      const nextNorthUp = !value;
+      map.easeTo({
+        bearing: nextNorthUp ? 0 : (fix?.heading ?? map.getBearing()),
+        duration: 500,
+      });
+      return nextNorthUp;
+    });
+  };
+
   const readouts = useMemo(
     () => [
       {
@@ -585,8 +612,9 @@ function App() {
         <section className="readout-panel" aria-label="Live navigation data">
           <div className="primary-depth">
             <div>
-              <span>Estimated depth</span>
+              <span>Map depth</span>
               <strong>{formatDepth(depth.value)}</strong>
+              <small>To land --</small>
             </div>
             <Waves size={28} />
           </div>
@@ -628,24 +656,50 @@ function App() {
             </span>
           </div>
 
+          <button
+            type="button"
+            className={
+              followingLocation && northUp
+                ? "location-mode-button active"
+                : "location-mode-button"
+            }
+            onClick={recenterOrToggleNorth}
+            title={
+              followingLocation
+                ? northUp
+                  ? "Unlock north-up"
+                  : "Fix north-up"
+                : "Return to GPS location"
+            }
+          >
+            {followingLocation ? <Compass size={20} /> : <LocateFixed size={20} />}
+            <span>{followingLocation ? "Fix north" : "My location"}</span>
+          </button>
+
           <div className="panel-actions">
             <button
               type="button"
               className={displayOpen ? "active" : ""}
-              onClick={() => setDisplayOpen((value) => !value)}
+              onClick={() => {
+                setDisplayOpen((value) => !value);
+                setControlsOpen(false);
+              }}
               title="Show display options"
             >
               {displayOpen ? <X size={18} /> : <SlidersHorizontal size={18} />}
-              <span>Display</span>
+              <span>Settings</span>
             </button>
             <button
               type="button"
               className={controlsOpen ? "active" : ""}
-              onClick={() => setControlsOpen((value) => !value)}
+              onClick={() => {
+                setControlsOpen((value) => !value);
+                setDisplayOpen(false);
+              }}
               title="Show navigation controls"
             >
-              {controlsOpen ? <X size={18} /> : <Navigation size={18} />}
-              <span>Nav</span>
+              {controlsOpen ? <X size={18} /> : <Layers size={18} />}
+              <span>Nav layers</span>
             </button>
           </div>
 
@@ -673,15 +727,6 @@ function App() {
               >
                 <LocateFixed size={20} />
                 <span>Start</span>
-              </button>
-              <button
-                type="button"
-                className={follow ? "active" : ""}
-                onClick={() => setFollow((value) => !value)}
-                title={follow ? "Disable follow mode" : "Enable follow mode"}
-              >
-                {follow ? <Navigation size={20} /> : <LocateOff size={20} />}
-                <span>Follow</span>
               </button>
               <button
                 type="button"

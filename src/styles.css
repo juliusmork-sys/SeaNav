@@ -430,6 +430,48 @@ button {
   gap: 6px;
 }
 
+.primary-depth small {
+  display: block;
+  margin-top: 10px;
+  color: #d5e8ee;
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+.location-mode-button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(188, 225, 235, 0.16);
+  border-radius: 7px;
+  color: #dff5fb;
+  background: rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.location-mode-button:hover,
+.location-mode-button:focus-visible {
+  outline: none;
+  border-color: rgba(94, 231, 255, 0.75);
+  background: rgba(94, 231, 255, 0.16);
+}
+
+.location-mode-button.active {
+  color: #061219;
+  border-color: transparent;
+  background: #5ee7ff;
+}
+
+.location-mode-button span {
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notice {
   align-items: flex-start;
   color: #ffd195;
@@ -1979,5 +2021,301 @@ button {
 
   .controls span {
     display: none;
+  }
+}
+
+@media (max-width: 820px) and (orientation: portrait) {
+  .maplibregl-ctrl-top-right,
+  .side-menu,
+  .controls {
+    display: none;
+  }
+
+  .topbar {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    left: auto;
+  }
+
+  .brand {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 7px;
+  }
+
+  .brand div {
+    display: none;
+  }
+
+  .readout-panel {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    width: 100vw;
+    min-height: calc(138px + env(safe-area-inset-bottom));
+    grid-template-areas:
+      "actions motion depth gps"
+      "actions motion depth locate";
+    grid-template-columns: 62px minmax(102px, 1fr) minmax(102px, 1fr) 66px;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+    align-items: stretch;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+    background: rgba(7, 16, 24, 0.9);
+    box-shadow: 0 -14px 34px rgba(0, 0, 0, 0.28);
+  }
+
+  .primary-depth,
+  .readout-grid,
+  .accuracy,
+  .location-mode-button,
+  .panel-actions {
+    min-width: 0;
+    margin: 0;
+  }
+
+  .primary-depth,
+  .accuracy,
+  .location-mode-button,
+  .motion-readout,
+  .panel-actions button {
+    border: 1px solid rgba(188, 225, 235, 0.22);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .primary-depth {
+    grid-area: depth;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-bottom: 1px solid rgba(188, 225, 235, 0.22);
+    text-align: center;
+  }
+
+  .primary-depth svg {
+    display: none;
+  }
+
+  .primary-depth span,
+  .readout span {
+    font-size: 0.58rem;
+  }
+
+  .primary-depth strong {
+    margin-top: 5px;
+    font-size: clamp(1rem, 4.8vw, 1.35rem);
+    white-space: nowrap;
+  }
+
+  .primary-depth small {
+    margin-top: 14px;
+    font-size: clamp(0.68rem, 3vw, 0.8rem);
+  }
+
+  .readout-panel > p,
+  .notice {
+    display: none;
+  }
+
+  .readout-grid {
+    grid-area: motion;
+    display: block;
+  }
+
+  .readout-grid > .readout:not(.motion-readout) {
+    display: none;
+  }
+
+  .motion-readout {
+    display: grid;
+    height: 100%;
+    grid-template-rows: 1fr 1fr;
+    padding: 0;
+  }
+
+  .motion-readout > div {
+    display: grid;
+    min-height: 0;
+    align-content: center;
+    justify-items: center;
+    padding: 8px;
+    text-align: center;
+  }
+
+  .motion-readout strong {
+    margin-top: 5px;
+    font-size: clamp(0.78rem, 3.7vw, 1rem);
+    white-space: nowrap;
+  }
+
+  .accuracy {
+    grid-area: gps;
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 5px;
+    align-items: center;
+    padding: 6px;
+    font-size: 0.56rem;
+    text-align: left;
+  }
+
+  .accuracy-target,
+  .accuracy-target svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .accuracy-target .status-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .accuracy-copy {
+    gap: 0;
+    line-height: 1.05;
+  }
+
+  .accuracy-copy > span {
+    display: grid;
+    gap: 2px;
+  }
+
+  .accuracy strong {
+    display: block;
+    font-size: clamp(0.68rem, 3vw, 0.8rem);
+    white-space: nowrap;
+  }
+
+  .location-mode-button {
+    grid-area: locate;
+    min-height: 0;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .location-mode-button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .location-mode-button span {
+    font-size: 0.58rem;
+    white-space: normal;
+  }
+
+  .panel-actions {
+    grid-area: actions;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .panel-actions button {
+    height: auto;
+    min-height: 0;
+    flex-direction: column;
+    gap: 6px;
+    padding: 5px;
+  }
+
+  .panel-actions button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .panel-actions span {
+    display: block;
+    font-size: 0.62rem;
+    white-space: normal;
+  }
+
+  .panel-drawer {
+    position: absolute;
+    right: 10px;
+    bottom: calc(100% + 8px);
+    left: 10px;
+    margin: 0;
+    padding: 8px;
+    border: 1px solid rgba(188, 225, 235, 0.24);
+    border-radius: 8px;
+    background: rgba(7, 16, 24, 0.9);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(18px);
+  }
+
+  .display-drawer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px 12px;
+  }
+
+  .embedded-controls {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .embedded-controls button {
+    height: 38px;
+    gap: 0;
+  }
+
+  .embedded-controls button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .embedded-controls span {
+    display: none;
+  }
+}
+
+@media (max-width: 370px) and (orientation: portrait) {
+  .readout-panel {
+    grid-template-columns: 58px minmax(86px, 1fr) minmax(86px, 1fr) 60px;
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .panel-actions span {
+    font-size: 0.58rem;
+  }
+
+  .primary-depth strong,
+  .motion-readout strong {
+    font-size: 0.78rem;
+  }
+
+  .primary-depth small {
+    font-size: 0.62rem;
+  }
+
+  .accuracy {
+    grid-template-columns: 16px minmax(0, 1fr);
+    padding: 5px;
+  }
+
+  .accuracy-target,
+  .accuracy-target svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .accuracy-copy {
+    font-size: 0.48rem;
+  }
+
+  .accuracy strong {
+    font-size: 0.62rem;
   }
 }

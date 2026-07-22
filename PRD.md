@@ -27,6 +27,9 @@ Recreational boaters on the Oslo Fjord who want a free, quick, browser-based pos
 | F7 | Nautical chart overlay | Toggle official Norwegian nautical chart layer (depth contours, buoys, hazards) over the base map for Oslo Fjord. |
 | F8 | Accuracy indicator | Show GPS accuracy radius (meters) so user knows fix quality. |
 | F9 | Responsive layout | Same app, adapts to PC (mouse/keyboard) and mobile (touch) without separate builds. |
+| F10 | Daylight-first theme | UI should be optimized for daytime use at sea with a high-contrast light theme. A dark theme can be added later as an optional mode. |
+| F11 | Bilingual language support | Norwegian is the primary language. English remains available as a user-selectable option in settings. |
+| F12 | Precise coordinates overlay | User can show/hide a compact high-precision latitude/longitude panel from the map layers menu. |
 
 ## 6. Non-Functional Requirements
 - **HTTPS required** — Geolocation API is blocked on plain HTTP in all modern browsers.
@@ -46,8 +49,11 @@ Tile source: **OpenFreeMap** (`https://tiles.openfreemap.org/styles/liberty`) �
 - Docs: [kartverket.no/en/api-and-data](https://www.kartverket.no/en/api-and-data)
 
 ### Depth data
-**EMODnet Bathymetry** (`ows.emodnet-bathymetry.eu`) — free WMS/WFS/WCS plus a REST point-extraction service that returns water depth at a given lat/long from their Digital Terrain Model. Use this as the numeric "estimated depth" source since it exposes a queryable point API (Kartverket's own depth layer is view-only/uncalibrated). Coverage includes Norwegian waters.
-- Docs: [emodnet.ec.europa.eu/en/bathymetry](https://emodnet.ec.europa.eu/en/bathymetry)
+**Kartverket Sjøkart - Dybdedata WFS** (`wfs.geonorge.no/skwms1/wfs.dybdedata`) — official Norwegian hydrographic vector data. Use `Dybdepunkt` soundings as the primary numeric source, sampled near the current GPS position and interpolated from nearby points when an exact sounding is not available. This avoids fragile raster/OCR extraction from nautical chart tiles.
+
+**EMODnet Bathymetry** (`ows.emodnet-bathymetry.eu`) — free WMS/WFS/WCS plus a REST point-extraction service. Keep this as a broader fallback when Kartverket has no nearby sounding points or the WFS endpoint is temporarily unavailable.
+- Kartverket/Data Norge: [Sjøkart - Dybdedata WFS](https://data.norge.no/en/data-services/df6a0e9b-6363-39cd-a86a-81f574267c9f/sjokart-dybdedata-wfs)
+- EMODnet docs: [emodnet.ec.europa.eu/en/bathymetry](https://emodnet.ec.europa.eu/en/bathymetry)
 
 ### GPS / motion
 **Browser Geolocation API** (`navigator.geolocation.watchPosition`) for lat/long/speed/heading/accuracy. **DeviceOrientationEvent** (mobile only, requires permission on iOS 13+) as compass fallback when speed-derived heading is unavailable (stationary boat).
@@ -56,14 +62,14 @@ Tile source: **OpenFreeMap** (`https://tiles.openfreemap.org/styles/liberty`) �
 Both require an API key and have paid tiers past a free quota, and neither includes marine depth soundings — you'd still need EMODnet/Kartverket for bathymetry on top. Since a key-free, quota-free stack (MapLibre + OpenFreeMap) covers the base map needs just as well for a prototype, it's a straight net win to skip them.
 
 ## 8. Architecture Sketch
-- Single-page app, no backend required for prototype (all APIs above are called client-side; if CORS blocks a WMS call from the browser, add a thin serverless proxy).
+- Single-page app with a thin serverless API endpoint for depth sampling. The browser calls `/api/depth`; that function queries Kartverket WFS, parses GML server-side, returns compact JSON, and keeps CORS/parsing complexity out of the mobile client.
 - Frontend: React + MapLibre GL JS.
 - State: current position, derived speed/heading, last-fetched depth (poll on position change, debounced).
 - Layers: base (OpenFreeMap) → nautical chart (Kartverket WMS, toggleable) → user position marker + accuracy circle.
 
 ## 9. Risks / Open Questions
 - Desktop browsers often lack a real GPS chip — position derives from Wi-Fi/IP geolocation, accuracy can be hundreds of meters to kilometers, and `speed`/`heading` will frequently be `null`. PRD treats this as expected/acceptable for a prototype; UI should show accuracy radius so it's not mistaken for GPS-grade fix.
-- EMODnet Bathymetry DTM resolution (~ hundreds of meters) means depth is an estimate, not survey-grade — needs clear "estimated" labeling to avoid safety-critical misuse.
+- Kartverket WFS soundings are official chart source data, but the displayed value is still an estimate between discrete soundings, not a live echosounder reading. Confidence should degrade with distance to the nearest sampled depth point.
 - Kartverket WMS licensing/attribution terms should be double-checked for the exact reuse terms before any public deployment (fine for a prototype).
 
 ## 10. Success Criteria (prototype)

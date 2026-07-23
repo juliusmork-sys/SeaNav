@@ -46,6 +46,7 @@ button {
 .controls,
 .side-menu,
 .coordinate-panel,
+.gps-alert,
 .marine-alert {
   position: absolute;
   z-index: 2;
@@ -88,6 +89,66 @@ button {
   border-color: rgba(178, 39, 39, 0.34);
   color: #441919;
   background: rgba(255, 235, 232, 0.95);
+}
+
+.marine-alert.below-gps-alert {
+  top: calc(max(14px, env(safe-area-inset-top)) + 70px);
+}
+
+.gps-alert {
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  display: grid;
+  width: min(640px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px);
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  border: 1px solid rgba(178, 39, 39, 0.28);
+  border-radius: 8px;
+  color: #441919;
+  background: rgba(255, 235, 232, 0.96);
+  box-shadow: 0 10px 26px rgba(11, 35, 46, 0.16);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.2;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.gps-alert > svg {
+  flex: 0 0 auto;
+}
+
+.gps-alert strong,
+.gps-alert span {
+  display: block;
+}
+
+.gps-alert span {
+  margin-top: 2px;
+  color: #6b2a23;
+  font-weight: 700;
+}
+
+.gps-alert-action {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(178, 39, 39, 0.22);
+  border-radius: 999px;
+  color: #441919;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.gps-alert-action:hover,
+.gps-alert-action:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .marine-alert svg {
@@ -334,6 +395,11 @@ button {
   box-shadow: 0 0 16px rgba(84, 240, 177, 0.8);
 }
 
+.status-dot.limited {
+  background: #f59e0b;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.72);
+}
+
 .readout-panel {
   right: max(14px, env(safe-area-inset-right));
   bottom: calc(92px + env(safe-area-inset-bottom));
@@ -347,18 +413,24 @@ button {
 .primary-depth {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
   padding: 0;
   border-bottom: 0;
 }
 
-.primary-depth > div {
+.primary-depth > div,
+.primary-depth > button {
   min-width: 0;
   min-height: 74px;
   padding: 10px;
-  border: 1px solid rgba(188, 225, 235, 0.18);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.primary-depth > * + * {
+  border-top: 0;
+  border-left: 1px solid rgba(188, 225, 235, 0.16);
 }
 
 .primary-depth svg {
@@ -488,26 +560,34 @@ button {
   transform: translate(-50%, -50%);
 }
 
-.motion-readout {
+.instrument-pair {
   display: grid;
-  grid-column: 1 / -1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
   padding: 0;
 }
 
+.motion-readout {
+  grid-column: 1 / -1;
+}
+
+.instrument-pair > div,
+.instrument-pair > button,
 .motion-readout > div,
 .motion-readout > button {
   min-width: 0;
   padding: 8px 10px;
 }
 
+.instrument-pair > * + *,
 .motion-readout > * + * {
   border-top: 0;
   border-left: 1px solid rgba(188, 225, 235, 0.16);
 }
 
+.instrument-toggle,
 .speed-toggle {
+  position: relative;
   display: grid;
   width: 100%;
   min-height: 0;
@@ -522,6 +602,8 @@ button {
   cursor: pointer;
 }
 
+.instrument-toggle:hover,
+.instrument-toggle:focus-visible,
 .speed-toggle:hover,
 .speed-toggle:focus-visible {
   background: rgba(55, 121, 141, 0.08);
@@ -630,12 +712,81 @@ button {
   white-space: nowrap;
 }
 
+.vipps-qr-panel {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid rgba(188, 225, 235, 0.16);
+  border-radius: 7px;
+  color: #dff5fb;
+  background: rgba(255, 255, 255, 0.07);
+  text-decoration: none;
+}
+
+.vipps-qr-panel img {
+  display: block;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  background: #ffffff;
+  object-fit: contain;
+}
+
+.vipps-qr-panel span,
+.vipps-qr-panel strong,
+.vipps-qr-panel small {
+  display: block;
+  min-width: 0;
+}
+
+.vipps-qr-panel strong {
+  overflow: hidden;
+  font-size: 0.76rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vipps-qr-panel small {
+  margin-top: 3px;
+  color: rgba(223, 245, 251, 0.72);
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
 .sea-marks-modal {
   position: absolute;
   inset: 0;
   z-index: 5;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  color: #061923;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(251, 253, 251, 0.98) 0%,
+      rgba(226, 242, 238, 0.98) 48%,
+      rgba(237, 244, 232, 0.98) 100%
+    );
+}
+
+.gps-help-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   padding:
     max(16px, env(safe-area-inset-top))
@@ -706,6 +857,47 @@ button {
   margin: 0 auto;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+.gps-help-grid {
+  display: grid;
+  max-width: 1060px;
+  width: 100%;
+  min-height: 0;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 0 auto;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.gps-help-card {
+  align-self: start;
+  padding: 14px;
+  border: 1px solid rgba(70, 98, 110, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.gps-help-card strong {
+  display: block;
+  color: #061923;
+  font-size: 0.95rem;
+  line-height: 1.15;
+}
+
+.gps-help-card ol {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: #274653;
+  font-size: 0.82rem;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.gps-help-card li + li {
+  margin-top: 7px;
 }
 
 .sea-mark-card {
@@ -1434,6 +1626,8 @@ button {
     height: 100%;
   }
 
+  .instrument-pair > div,
+  .instrument-pair > button,
   .motion-readout > div,
   .motion-readout > button {
     display: grid;
@@ -1575,6 +1769,8 @@ button {
     height: 100%;
   }
 
+  .instrument-pair > div,
+  .instrument-pair > button,
   .motion-readout > div,
   .motion-readout > button {
     display: grid;
@@ -2626,6 +2822,7 @@ button {
   .primary-depth {
     grid-area: depth;
     display: grid;
+    grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
     align-items: stretch;
     justify-content: stretch;
@@ -2634,7 +2831,8 @@ button {
     text-align: center;
   }
 
-  .primary-depth > div {
+  .primary-depth > div,
+  .primary-depth > button {
     display: grid;
     min-height: 0;
     align-content: center;
@@ -2642,8 +2840,9 @@ button {
     padding: 6px 8px;
   }
 
-  .primary-depth > div + div {
+  .primary-depth > * + * {
     border-top: 1px solid rgba(188, 225, 235, 0.16);
+    border-left: 0;
   }
 
   .primary-depth svg {
@@ -2687,6 +2886,8 @@ button {
     padding: 0;
   }
 
+  .instrument-pair > div,
+  .instrument-pair > button,
   .motion-readout > div,
   .motion-readout > button {
     display: grid;
@@ -2843,7 +3044,8 @@ button {
     font-size: 0.78rem;
   }
 
-  .primary-depth > div {
+  .primary-depth > div,
+  .primary-depth > button {
     padding: 5px 4px;
   }
 
@@ -2980,6 +3182,7 @@ button {
 .location-mode-button,
 .panel-actions button,
 .settings-actions button,
+.vipps-qr-panel,
 .embedded-controls button,
 .controls button,
 .menu-toggle {
@@ -3011,6 +3214,7 @@ button {
 .motion-readout,
 .panel-actions button,
 .settings-actions button,
+.vipps-qr-panel,
 .embedded-controls button,
 .controls button {
   border-color: rgba(70, 98, 110, 0.28);
@@ -3036,7 +3240,8 @@ button {
 .location-mode-button,
 .motion-readout,
 .panel-actions button,
-.settings-actions button {
+.settings-actions button,
+.vipps-qr-panel {
   background: rgba(255, 255, 255, 0.66);
   backdrop-filter: blur(12px);
   box-shadow:
@@ -3048,6 +3253,8 @@ button {
 .panel-actions button:focus-visible,
 .settings-actions button:hover,
 .settings-actions button:focus-visible,
+.vipps-qr-panel:hover,
+.vipps-qr-panel:focus-visible,
 .embedded-controls button:hover,
 .embedded-controls button:focus-visible,
 .controls button:hover,
@@ -3060,6 +3267,10 @@ button {
   background: rgba(208, 244, 250, 0.92);
 }
 
+.vipps-qr-panel small {
+  color: #476572;
+}
+
 .panel-actions button.active,
 .settings-actions button.active,
 .embedded-controls button.active,
@@ -3067,6 +3278,35 @@ button {
 .location-mode-button.active {
   color: #ffffff;
   background: #006b86;
+}
+
+.embedded-controls button[data-mode="areas"] {
+  color: #ffffff;
+  background: #b45309;
+}
+
+.beach-popup .maplibregl-popup-content {
+  padding: 8px 12px;
+  border: 1px solid rgba(180, 83, 9, 0.28);
+  border-radius: 8px;
+  color: #10212a;
+  background: rgba(255, 252, 245, 0.96);
+  box-shadow: 0 8px 24px rgba(11, 35, 46, 0.18);
+}
+
+.beach-popup strong {
+  display: block;
+  max-width: min(240px, 70vw);
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.beach-popup .maplibregl-popup-close-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: #3d5964;
 }
 
 .toggle-row input {
@@ -3122,6 +3362,11 @@ button {
   box-shadow: 0 0 0 3px rgba(7, 135, 95, 0.16);
 }
 
+.status-dot.limited {
+  background: #b45309;
+  box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.18);
+}
+
 .readout-panel p.warning,
 .notice {
   color: #8a4f00;
@@ -3149,13 +3394,22 @@ button {
   }
 
   .primary-depth {
+    border: 1px solid rgba(70, 98, 110, 0.28);
+    background: rgba(255, 255, 255, 0.66);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.72),
+      0 1px 0 rgba(11, 35, 46, 0.04);
+    backdrop-filter: blur(12px);
+  }
+
+  .primary-depth > div,
+  .primary-depth > button {
     border: 0;
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
   }
 
-  .primary-depth > div,
   .readout {
     border: 1px solid rgba(70, 98, 110, 0.28);
     background: rgba(255, 255, 255, 0.66);
@@ -3191,6 +3445,7 @@ button {
     padding: 9px 10px;
   }
 
+  .instrument-pair > * + *,
   .motion-readout > * + * {
     border-top: 0;
     border-left: 1px solid rgba(70, 98, 110, 0.18);
@@ -3337,6 +3592,7 @@ button {
     grid-template-rows: 1fr 1fr;
   }
 
+  .instrument-pair > * + *,
   .motion-readout > * + * {
     border-top: 1px solid rgba(70, 98, 110, 0.18);
     border-left: 0;
@@ -3350,6 +3606,31 @@ button {
     max-width: none;
     padding: 8px 10px;
     transform: none;
+  }
+
+  .gps-alert {
+    top: calc(max(8px, env(safe-area-inset-top)) + 44px);
+    right: auto;
+    left: max(8px, env(safe-area-inset-left));
+    width: calc(100vw - max(8px, env(safe-area-inset-left)) - max(8px, env(safe-area-inset-right)));
+    max-width: none;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 8px 10px;
+    transform: none;
+  }
+
+  .gps-alert-action {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 0.66rem;
+  }
+
+  .gps-alert .gps-alert-action + .gps-alert-action {
+    display: none;
+  }
+
+  .marine-alert.below-gps-alert {
+    top: calc(max(8px, env(safe-area-inset-top)) + 118px);
   }
 
   .maplibregl-ctrl-bottom-right {
@@ -3379,6 +3660,20 @@ button {
     width: auto;
     max-width: min(420px, calc(100vw - min(28vw, 270px) - 32px));
     transform: none;
+  }
+
+  .gps-alert {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: auto;
+    left: calc(min(28vw, 270px) + max(18px, env(safe-area-inset-left)));
+    width: auto;
+    max-width: min(520px, calc(100vw - min(28vw, 270px) - 32px));
+    transform: none;
+  }
+
+  .marine-alert.below-gps-alert {
+    top: calc(max(8px, env(safe-area-inset-top)) + 74px);
   }
 }
 
@@ -3479,6 +3774,8 @@ button {
     padding: 0;
   }
 
+  .instrument-pair > div,
+  .instrument-pair > button,
   .motion-readout > div,
   .motion-readout > button {
     display: grid;
@@ -3498,6 +3795,7 @@ button {
   .primary-depth {
     grid-area: depth;
     display: grid;
+    grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
     min-height: 0;
     align-items: stretch;
@@ -3507,7 +3805,8 @@ button {
     text-align: center;
   }
 
-  .primary-depth > div {
+  .primary-depth > div,
+  .primary-depth > button {
     display: grid;
     min-height: 0;
     align-content: center;
@@ -3515,8 +3814,9 @@ button {
     padding: 7px;
   }
 
-  .primary-depth > div + div {
+  .primary-depth > * + * {
     border-top: 1px solid rgba(70, 98, 110, 0.18);
+    border-left: 0;
   }
 
   .primary-depth svg {
@@ -3586,8 +3886,8 @@ button {
     top: max(8px, env(safe-area-inset-top));
     right: auto;
     bottom: auto;
-    left: calc(100% + 8px);
-    width: min(300px, calc(100vw - min(28vw, 270px) - 24px));
+    left: calc(100% + 18px);
+    width: min(300px, calc(100vw - min(28vw, 270px) - 44px));
     max-height: calc(100svh - 16px);
     margin: 0;
     padding: 8px;
@@ -3620,4 +3920,171 @@ button {
   .maplibregl-ctrl-top-right {
     display: none;
   }
+}
+
+.readout-panel .instrument-pair {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 1fr;
+  gap: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.readout-panel .primary-depth,
+.readout-panel .motion-readout {
+  border: 1px solid rgba(70, 98, 110, 0.28);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 0 rgba(11, 35, 46, 0.04);
+  backdrop-filter: blur(12px);
+}
+
+.readout-panel .instrument-pair > .instrument-toggle {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-content: center;
+  justify-items: center;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.readout-panel .instrument-pair > .instrument-toggle + .instrument-toggle {
+  border-top: 0;
+  border-left: 1px solid rgba(70, 98, 110, 0.18);
+}
+
+.readout-panel .instrument-pair span {
+  display: block;
+  color: #3d5964;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.readout-panel .instrument-pair strong {
+  display: block;
+  margin-top: 5px;
+  color: #061923;
+  font-size: clamp(0.82rem, 2.1vw, 1.02rem);
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+@media (max-width: 820px) and (orientation: portrait) {
+  .readout-panel .instrument-pair {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .readout-panel .instrument-pair > .instrument-toggle + .instrument-toggle {
+    border-top: 1px solid rgba(70, 98, 110, 0.18);
+    border-left: 0;
+  }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .readout-panel .instrument-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 1fr;
+    height: 100%;
+  }
+
+  .readout-panel .instrument-pair > .instrument-toggle {
+    height: 100%;
+  }
+
+  .readout-panel .instrument-pair > .instrument-toggle + .instrument-toggle {
+    border-top: 0;
+    border-left: 1px solid rgba(70, 98, 110, 0.18);
+  }
+}
+
+button {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.readout-panel > .accuracy:hover,
+.readout-panel > .accuracy:focus-visible,
+.location-mode-button:hover,
+.location-mode-button:focus-visible,
+.panel-actions button:hover,
+.panel-actions button:focus-visible,
+.embedded-controls button:hover,
+.embedded-controls button:focus-visible,
+.settings-actions button:hover,
+.settings-actions button:focus-visible,
+.vipps-qr-panel:hover,
+.vipps-qr-panel:focus-visible,
+.controls button:hover,
+.controls button:focus-visible,
+.menu-toggle:hover,
+.menu-toggle:focus-visible,
+.sea-marks-close:hover,
+.sea-marks-close:focus-visible,
+.marine-alert-close:hover,
+.marine-alert-close:focus-visible,
+.gps-alert-action:hover,
+.gps-alert-action:focus-visible {
+  border-color: rgba(0, 99, 124, 0.56);
+  background-color: rgba(208, 244, 250, 0.64);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 2px 8px rgba(11, 35, 46, 0.1);
+  outline: none;
+}
+
+.readout-panel .instrument-pair > .instrument-toggle:hover,
+.readout-panel .instrument-pair > .instrument-toggle:focus-visible {
+  background: rgba(208, 244, 250, 0.48);
+  box-shadow: none;
+  outline: none;
+}
+
+.readout-panel > .accuracy:hover,
+.readout-panel > .accuracy:focus-visible {
+  background: rgba(208, 244, 250, 0.78);
+}
+
+.panel-actions button.active:hover,
+.panel-actions button.active:focus-visible,
+.embedded-controls button.active:hover,
+.embedded-controls button.active:focus-visible,
+.settings-actions button.active:hover,
+.settings-actions button.active:focus-visible,
+.controls button.active:hover,
+.controls button.active:focus-visible,
+.location-mode-button.active:hover,
+.location-mode-button.active:focus-visible {
+  border-color: rgba(0, 99, 124, 0.76);
+  background: #07809f;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 2px 10px rgba(0, 99, 124, 0.22);
+}
+
+.embedded-controls button[data-mode="areas"]:hover,
+.embedded-controls button[data-mode="areas"]:focus-visible {
+  background: #c4610b;
 }

@@ -385,13 +385,11 @@ function findNearestBeach(
 
 function createBeachMarkers(
   collection: BeachFeatureCollection,
-  latitude: number,
-  longitude: number,
 ): BeachMarkerFeatureCollection {
   return {
     type: "FeatureCollection",
     features: collection.features.flatMap((feature) => {
-      const center = geometryMarkerPoint(feature.geometry, latitude, longitude);
+      const center = geometryCenter(feature.geometry);
       if (!center) return [];
 
       const properties = feature.properties ?? {};
@@ -469,8 +467,6 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       featureCollection: safeCollection,
       markerFeatureCollection: createBeachMarkers(
         safeCollection,
-        latitude,
-        longitude,
       ),
     });
   } catch (error) {

@@ -3,8 +3,8 @@ import maplibregl, { Map } from "maplibre-gl";
 import {
   Anchor,
   BookOpen,
+  CreditCard,
   Crosshair,
-  HeartHandshake,
   Layers,
   LocateFixed,
   Map as MapIcon,
@@ -64,6 +64,21 @@ type BeachState = {
 
 type Language = "no" | "en";
 type SpeedUnit = "kn" | "kmh";
+type DepthUnit = "m" | "ft";
+type DistanceUnit = "metric" | "nm";
+type HeadingMode = "full" | "degrees";
+type BeachDisplayMode = "off" | "icons" | "areas";
+type GpsIssueCode =
+  | "insecure"
+  | "unsupported"
+  | "denied"
+  | "unavailable"
+  | "timeout"
+  | "unknown";
+type GpsIssue = {
+  code: GpsIssueCode;
+  message: string;
+};
 type SeaMark = {
   title: string;
   description: string;
@@ -77,6 +92,9 @@ type CameraPadding = {
   bottom: number;
   left: number;
 };
+
+const DEFAULT_VIPPS_PAYMENT_URL = "https://qr.vipps.no/vp/nCQjy9dcM";
+const VIPPS_QR_IMAGE_URL = "/vipps-qr.png";
 
 const UI_TEXT = {
   no: {
@@ -96,9 +114,64 @@ const UI_TEXT = {
     longitude: "Lengdegrad",
     speed: "Hastighet",
     toggleSpeedUnit: "Veksle mellom knop og kilometer i timen",
+    toggleDepthUnit: "Veksle mellom meter og fot",
+    toggleDistanceUnit: "Veksle mellom kilometer/meter og nautiske mil",
+    toggleHeadingMode: "Veksle mellom kurs med kompasspunkt og bare grader",
     heading: "Kurs",
     gpsAccuracy: "GPS-presisjon",
+    gpsRestarting: "Re-starter...",
+    noGps: "Ingen GPS",
     retryGps: "Start eller prøv GPS-sporing på nytt",
+    gpsIssueTitle: "GPS-posisjon er ikke aktiv",
+    gpsIssueHelp: "Vis hjelp",
+    gpsIssueRetry: "Prøv igjen",
+    dismissGpsIssue: "Lukk GPS-varsel",
+    gpsHelpTitle: "Aktiver GPS for SeaNav",
+    gpsHelpSubtitle:
+      "SeaNav trenger presis posisjon i nettleseren for å vise fart, kurs og egen båt riktig.",
+    closeGpsHelp: "Lukk GPS-hjelp",
+    gpsIssueMessages: {
+      insecure:
+        "GPS virker bare på sikker tilkobling. Åpne appen via https://seanav.no.",
+      unsupported:
+        "Denne enheten eller nettleseren tilbyr ikke GPS-posisjon til nettsider.",
+      denied:
+        "Posisjonstilgang er blokkert. Gi nettleseren og seanav.no tilgang til presis posisjon.",
+      unavailable:
+        "Enheten klarer ikke hente posisjon akkurat nå. Sjekk at stedstjenester og presis posisjon er aktivert.",
+      timeout:
+        "GPS brukte for lang tid. Gå utendørs, sjekk stedstjenester og prøv igjen.",
+      unknown:
+        "GPS-sporing kunne ikke startes. Sjekk posisjonsinnstillingene og prøv igjen.",
+    },
+    gpsHelpSections: [
+      {
+        title: "Android og Chrome",
+        steps: [
+          "Åpne Android Innstillinger > Posisjon og slå på posisjon.",
+          "Gå til Apper > Chrome > Tillatelser > Posisjon og velg Tillat.",
+          "Velg presis posisjon for Chrome hvis Android spør om nøyaktighet.",
+          "I Chrome: åpne seanav.no, trykk lås-/innstillingsikonet i adresselinjen og tillat posisjon for siden.",
+        ],
+      },
+      {
+        title: "iPhone og Safari",
+        steps: [
+          "Åpne Innstillinger > Personvern og sikkerhet > Stedstjenester og slå på stedstjenester.",
+          "Gå til Safari > Sted og velg Spør eller Tillat.",
+          "Åpne seanav.no igjen og tillat posisjon når Safari spør.",
+          "Hvis valget er blokkert: Innstillinger > Safari > Avansert > Nettsteddata, fjern seanav.no og prøv igjen.",
+        ],
+      },
+      {
+        title: "Vanlige årsaker",
+        steps: [
+          "Bærbare PC-er og nettbrett uten GPS kan gi grov eller manglende posisjon.",
+          "VPN, strømsparing eller dårlig dekning kan redusere presisjon.",
+          "For navigasjon bør mobilen ha fri sikt mot himmelen og presis posisjon aktivert.",
+        ],
+      },
+    ],
     unlockNorth: "Lås opp nord opp",
     fixNorth: "Lås nord opp",
     returnToLocation: "Gå til GPS-posisjon",
@@ -117,8 +190,10 @@ const UI_TEXT = {
     alertSound: "Varsellyd",
     seaMarks: "Sjømerker",
     openSeaMarks: "Åpne oversikt over sjømerker",
-    donate: "Doner med Vipps",
-    donateUnavailable: "Vipps-lenke er ikke satt opp ennå.",
+    payment: "Betal med Vipps",
+    paymentUnavailable: "Vipps-lenke er ikke satt opp ennå.",
+    paymentQrTitle: "Vipps QR-kode",
+    paymentQrDescription: "Skann med Vipps på mobilen.",
     closeSeaMarks: "Lukk sjømerker",
     seaMarksTitle: "Sjømerker",
     seaMarksSubtitle: "Norge bruker IALA region A.",
@@ -186,11 +261,14 @@ const UI_TEXT = {
       },
     ] satisfies SeaMark[],
     beachAreas: "Badeplasser",
+    beachLayerOff: "Av",
+    beachLayerIcons: "Strand",
+    beachLayerAreas: "Areal",
     dismissAlert: "Lukk varsel",
     showStandardMap: "Vis standard kart",
     showSatelliteImagery: "Vis satellittbilde",
     toggleNauticalChart: "Slå sjøkart av/på",
-    toggleBeachAreas: "Vis/skjul registrerte badeplasser",
+    toggleBeachAreas: "Bytt visning for badeplasser",
     togglePrecisePosition: "Vis/skjul presise koordinater",
     map: "Kart",
     satellite: "Satellitt",
@@ -224,9 +302,64 @@ const UI_TEXT = {
     longitude: "Longitude",
     speed: "Speed",
     toggleSpeedUnit: "Toggle between knots and kilometers per hour",
+    toggleDepthUnit: "Toggle between meters and feet",
+    toggleDistanceUnit: "Toggle between kilometers/meters and nautical miles",
+    toggleHeadingMode: "Toggle between heading with compass point and degrees only",
     heading: "Heading",
     gpsAccuracy: "GPS Accuracy",
+    gpsRestarting: "Restarting...",
+    noGps: "No GPS",
     retryGps: "Start or retry GPS tracking",
+    gpsIssueTitle: "GPS position is not active",
+    gpsIssueHelp: "Show help",
+    gpsIssueRetry: "Try again",
+    dismissGpsIssue: "Dismiss GPS alert",
+    gpsHelpTitle: "Enable GPS for SeaNav",
+    gpsHelpSubtitle:
+      "SeaNav needs precise browser location to show speed, course and your boat correctly.",
+    closeGpsHelp: "Close GPS help",
+    gpsIssueMessages: {
+      insecure:
+        "GPS only works on a secure connection. Open the app at https://seanav.no.",
+      unsupported:
+        "This device or browser does not provide GPS location to websites.",
+      denied:
+        "Location access is blocked. Allow the browser and seanav.no to use precise location.",
+      unavailable:
+        "The device cannot get a position right now. Check that location services and precise location are enabled.",
+      timeout:
+        "GPS took too long. Move outdoors, check location services and try again.",
+      unknown:
+        "GPS tracking could not start. Check location settings and try again.",
+    },
+    gpsHelpSections: [
+      {
+        title: "Android and Chrome",
+        steps: [
+          "Open Android Settings > Location and turn location on.",
+          "Go to Apps > Chrome > Permissions > Location and choose Allow.",
+          "Choose precise location for Chrome if Android asks about accuracy.",
+          "In Chrome: open seanav.no, tap the lock/settings icon in the address bar and allow location for the site.",
+        ],
+      },
+      {
+        title: "iPhone and Safari",
+        steps: [
+          "Open Settings > Privacy & Security > Location Services and turn location services on.",
+          "Go to Safari > Location and choose Ask or Allow.",
+          "Open seanav.no again and allow location when Safari asks.",
+          "If the choice is blocked: Settings > Safari > Advanced > Website Data, remove seanav.no and try again.",
+        ],
+      },
+      {
+        title: "Common causes",
+        steps: [
+          "Laptops and tablets without GPS can provide rough or missing positions.",
+          "VPN, power saving or poor signal can reduce accuracy.",
+          "For navigation, the phone should have a clear sky view and precise location enabled.",
+        ],
+      },
+    ],
     unlockNorth: "Unlock north-up",
     fixNorth: "Fix north-up",
     returnToLocation: "Return to GPS location",
@@ -245,8 +378,10 @@ const UI_TEXT = {
     alertSound: "Alert sound",
     seaMarks: "Sea marks",
     openSeaMarks: "Open sea mark overview",
-    donate: "Donate with Vipps",
-    donateUnavailable: "Vipps donation link is not configured yet.",
+    payment: "Pay with Vipps",
+    paymentUnavailable: "Vipps payment link is not configured yet.",
+    paymentQrTitle: "Vipps QR code",
+    paymentQrDescription: "Scan with Vipps on your phone.",
     closeSeaMarks: "Close sea marks",
     seaMarksTitle: "Sea marks",
     seaMarksSubtitle: "Norway uses IALA region A.",
@@ -314,11 +449,14 @@ const UI_TEXT = {
       },
     ] satisfies SeaMark[],
     beachAreas: "Bathing areas",
+    beachLayerOff: "Off",
+    beachLayerIcons: "Beach",
+    beachLayerAreas: "Area",
     dismissAlert: "Dismiss alert",
     showStandardMap: "Show standard map",
     showSatelliteImagery: "Show satellite imagery",
     toggleNauticalChart: "Toggle nautical chart",
-    toggleBeachAreas: "Show/hide registered bathing areas",
+    toggleBeachAreas: "Change bathing area display",
     togglePrecisePosition: "Show/hide precise coordinates",
     map: "Map",
     satellite: "Satellite",
@@ -493,13 +631,16 @@ function formatPreciseCoordinate(
   return `${Math.abs(value).toFixed(6)}° ${value >= 0 ? positive : negative}`;
 }
 
-function formatDepth(value: number | null) {
+function formatDepth(value: number | null, unit: DepthUnit) {
   if (value === null || Number.isNaN(value)) return "--";
-  return `${Math.abs(value).toFixed(1)} m`;
+  const absoluteValue = Math.abs(value);
+  if (unit === "ft") return `${(absoluteValue * 3.28084).toFixed(0)} ft`;
+  return `${absoluteValue.toFixed(1)} m`;
 }
 
-function formatDistance(value: number | null) {
+function formatDistance(value: number | null, unit: DistanceUnit) {
   if (value === null || Number.isNaN(value)) return "--";
+  if (unit === "nm") return `${(value / 1852).toFixed(value >= 1852 ? 1 : 2)} nm`;
   if (value >= 1000) return `${(value / 1000).toFixed(1)} km`;
   return `${Math.round(value)} m`;
 }
@@ -514,6 +655,16 @@ function formatSpeed(speedKnots: number | null | undefined, unit: SpeedUnit) {
   if (speedKnots === null || speedKnots === undefined) return "--";
   if (unit === "kmh") return `${(speedKnots * 1.852).toFixed(1)} km/t`;
   return `${speedKnots.toFixed(1)} kn`;
+}
+
+function formatHeading(
+  heading: number | null | undefined,
+  mode: HeadingMode,
+) {
+  if (heading === null || heading === undefined) return "--";
+  const degrees = Math.round(heading).toString().padStart(3, "0");
+  if (mode === "degrees") return `${degrees}°`;
+  return `${degrees}° ${compassPoint(heading)}`;
 }
 
 function getVisibleMapPadding(): CameraPadding {
@@ -630,6 +781,55 @@ function createBeachIconImageData() {
   context.stroke();
 
   return context.getImageData(0, 0, size, size);
+}
+
+function createBeachAreaPatternImageData() {
+  const size = 16;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.clearRect(0, 0, size, size);
+  context.strokeStyle = "rgba(234, 88, 12, 0.34)";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(-4, 16);
+  context.lineTo(16, -4);
+  context.moveTo(4, 20);
+  context.lineTo(20, 4);
+  context.stroke();
+
+  return context.getImageData(0, 0, size, size);
+}
+
+function getBeachFeatureName(
+  properties: maplibregl.MapGeoJSONFeature["properties"],
+) {
+  const rawName = properties?.name ?? properties?.Navn;
+  return typeof rawName === "string" && rawName.trim()
+    ? rawName.trim()
+    : "Badeplass";
+}
+
+function escapePopupText(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return character;
+    }
+  });
 }
 
 function playAlertSound() {
@@ -860,6 +1060,7 @@ function App() {
   const shorelineAbortRef = useRef<number | null>(null);
   const beachPositionAbortRef = useRef<number | null>(null);
   const beachMapAbortRef = useRef<number | null>(null);
+  const gpsRestartLabelTimeoutRef = useRef<number | null>(null);
   const beachPositionQueryRef = useRef<{
     latitude: number;
     longitude: number;
@@ -890,15 +1091,21 @@ function App() {
       : "no";
   });
   const [tracking, setTracking] = useState(false);
+  const [gpsRestarting, setGpsRestarting] = useState(false);
   const [followingLocation, setFollowingLocation] = useState(true);
   const [northUp, setNorthUp] = useState(false);
   const [mapBearing, setMapBearing] = useState(0);
   const [chartVisible, setChartVisible] = useState(true);
-  const [beachesVisible, setBeachesVisible] = useState(true);
+  const [beachDisplayMode, setBeachDisplayMode] =
+    useState<BeachDisplayMode>("icons");
   const [baseMap, setBaseMap] = useState<"map" | "satellite">("map");
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [seaMarksOpen, setSeaMarksOpen] = useState(false);
+  const [gpsHelpOpen, setGpsHelpOpen] = useState(false);
+  const [gpsIssue, setGpsIssue] = useState<GpsIssue | null>(null);
+  const [dismissedGpsIssueCode, setDismissedGpsIssueCode] =
+    useState<GpsIssueCode | null>(null);
   const [showOwnship, setShowOwnship] = useState(true);
   const [showAccuracyRing, setShowAccuracyRing] = useState(true);
   const [showNotice, setShowNotice] = useState(true);
@@ -914,7 +1121,46 @@ function App() {
       ? "kmh"
       : "kn";
   });
+  const [depthUnit, setDepthUnit] = useState<DepthUnit>(() => {
+    if (typeof window === "undefined") return "m";
+    return window.localStorage.getItem("seanav-depth-unit") === "ft"
+      ? "ft"
+      : "m";
+  });
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(() => {
+    if (typeof window === "undefined") return "metric";
+    return window.localStorage.getItem("seanav-distance-unit") === "nm"
+      ? "nm"
+      : "metric";
+  });
+  const [headingMode, setHeadingMode] = useState<HeadingMode>(() => {
+    if (typeof window === "undefined") return "full";
+    return window.localStorage.getItem("seanav-heading-mode") === "degrees"
+      ? "degrees"
+      : "full";
+  });
   const text = UI_TEXT[language];
+  const beachesVisible = beachDisplayMode !== "off";
+  const beachAreasVisible = beachDisplayMode === "areas";
+  const beachLayerLabel =
+    beachDisplayMode === "off"
+      ? text.beachLayerOff
+      : beachDisplayMode === "icons"
+        ? text.beachLayerIcons
+        : text.beachLayerAreas;
+  const visibleGpsIssue =
+    gpsIssue && gpsIssue.code !== dismissedGpsIssueCode ? gpsIssue : null;
+  const gpsStatusTone =
+    tracking && fix
+      ? fix.accuracy !== null && fix.accuracy > 20
+        ? "limited"
+        : "active"
+      : "inactive";
+  const gpsAccuracyLabel = gpsRestarting
+    ? text.gpsRestarting
+    : tracking && fix
+      ? text.gpsAccuracy
+      : text.noGps;
 
   const canAskOrientation =
     typeof window !== "undefined" &&
@@ -933,6 +1179,18 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem("seanav-speed-unit", speedUnit);
   }, [speedUnit]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-depth-unit", depthUnit);
+  }, [depthUnit]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-distance-unit", distanceUnit);
+  }, [distanceUnit]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-heading-mode", headingMode);
+  }, [headingMode]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1129,6 +1387,10 @@ function App() {
       if (beachIcon && !map.hasImage("beach-icon")) {
         map.addImage("beach-icon", beachIcon, { pixelRatio: 2 });
       }
+      const beachAreaPattern = createBeachAreaPatternImageData();
+      if (beachAreaPattern && !map.hasImage("beach-area-pattern")) {
+        map.addImage("beach-area-pattern", beachAreaPattern, { pixelRatio: 2 });
+      }
 
       map.addSource("satellite", {
         type: "raster",
@@ -1165,6 +1427,51 @@ function App() {
       map.addSource("beach-markers", {
         type: "geojson",
         data: EMPTY_FEATURE_COLLECTION,
+      });
+      map.addLayer({
+        id: "beach-area-fill",
+        type: "fill",
+        source: "beaches",
+        layout: {
+          visibility: "none",
+        },
+        paint: {
+          "fill-color": "#f97316",
+          "fill-opacity": 0.08,
+        },
+      });
+      map.addLayer({
+        id: "beach-area-hatch",
+        type: "fill",
+        source: "beaches",
+        layout: {
+          visibility: "none",
+        },
+        paint: {
+          "fill-pattern": "beach-area-pattern",
+          "fill-opacity": 0.32,
+        },
+      });
+      map.addLayer({
+        id: "beach-area-outline",
+        type: "line",
+        source: "beaches",
+        layout: {
+          visibility: "none",
+        },
+        paint: {
+          "line-color": "#ea580c",
+          "line-opacity": 0.38,
+          "line-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            9,
+            0.6,
+            14,
+            1.2,
+          ],
+        },
       });
       map.addLayer({
         id: "beach-marker-halo",
@@ -1227,6 +1534,41 @@ function App() {
           "text-halo-color": "#ffffff",
           "text-halo-width": 1.6,
         },
+      });
+      const beachPopupLayers = [
+        "beach-marker-halo",
+        "beach-marker",
+        "beach-label",
+        "beach-area-fill",
+        "beach-area-hatch",
+        "beach-area-outline",
+      ];
+      const showBeachPopup = (event: maplibregl.MapLayerMouseEvent) => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+
+        const name = getBeachFeatureName(feature.properties);
+        new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          offset: 14,
+          className: "beach-popup",
+        })
+          .setLngLat(event.lngLat)
+          .setHTML(`<strong>${escapePopupText(name)}</strong>`)
+          .addTo(map);
+      };
+      const showPointer = () => {
+        map.getCanvas().style.cursor = "pointer";
+      };
+      const hidePointer = () => {
+        map.getCanvas().style.cursor = "";
+      };
+
+      beachPopupLayers.forEach((layerId) => {
+        map.on("click", layerId, showBeachPopup);
+        map.on("mouseenter", layerId, showPointer);
+        map.on("mouseleave", layerId, hidePointer);
       });
       map.addSource("accuracy", {
         type: "geojson",
@@ -1291,6 +1633,9 @@ function App() {
       if (beachMapAbortRef.current !== null) {
         window.clearTimeout(beachMapAbortRef.current);
       }
+      if (gpsRestartLabelTimeoutRef.current !== null) {
+        window.clearTimeout(gpsRestartLabelTimeoutRef.current);
+      }
       map.off("rotate", syncMapBearing);
       map.off("move", syncMapBearing);
       map.remove();
@@ -1321,11 +1666,15 @@ function App() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getLayer("beach-marker")) return;
-    const visibility = beachesVisible ? "visible" : "none";
-    map.setLayoutProperty("beach-marker-halo", "visibility", visibility);
-    map.setLayoutProperty("beach-marker", "visibility", visibility);
-    map.setLayoutProperty("beach-label", "visibility", visibility);
-  }, [beachesVisible]);
+    const markerVisibility = beachesVisible ? "visible" : "none";
+    const areaVisibility = beachAreasVisible ? "visible" : "none";
+    map.setLayoutProperty("beach-marker-halo", "visibility", markerVisibility);
+    map.setLayoutProperty("beach-marker", "visibility", markerVisibility);
+    map.setLayoutProperty("beach-label", "visibility", markerVisibility);
+    map.setLayoutProperty("beach-area-fill", "visibility", areaVisibility);
+    map.setLayoutProperty("beach-area-hatch", "visibility", areaVisibility);
+    map.setLayoutProperty("beach-area-outline", "visibility", areaVisibility);
+  }, [beachAreasVisible, beachesVisible]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1531,14 +1880,38 @@ function App() {
       window.removeEventListener("deviceorientation", handleOrientation, true);
   }, []);
 
-  const startTracking = useCallback(async (requestCompass = true) => {
+  const startTracking = useCallback(async (
+    requestCompass = true,
+    showRestartingLabel = false,
+  ) => {
+    const setIssue = (code: GpsIssueCode) => {
+      setGpsIssue({
+        code,
+        message: text.gpsIssueMessages[code],
+      });
+    };
+
+    setDismissedGpsIssueCode(null);
+    if (showRestartingLabel) {
+      setGpsRestarting(true);
+      if (gpsRestartLabelTimeoutRef.current !== null) {
+        window.clearTimeout(gpsRestartLabelTimeoutRef.current);
+      }
+      gpsRestartLabelTimeoutRef.current = window.setTimeout(() => {
+        setGpsRestarting(false);
+        gpsRestartLabelTimeoutRef.current = null;
+      }, 2600);
+    }
+
     if (!window.isSecureContext) {
       setTracking(false);
+      setIssue("insecure");
       return;
     }
 
     if (!("geolocation" in navigator)) {
       setTracking(false);
+      setIssue("unsupported");
       return;
     }
 
@@ -1608,10 +1981,20 @@ function App() {
 
         lastFixRef.current = nextFix;
         setFix(nextFix);
+        setGpsIssue(null);
       },
       (error) => {
         setTracking(false);
-        console.warn(error.message || "Location permission denied");
+        const code =
+          error.code === 1
+            ? "denied"
+            : error.code === 2
+              ? "unavailable"
+              : error.code === 3
+                ? "timeout"
+                : "unknown";
+        setIssue(code);
+        console.warn(error.message || text.gpsIssueMessages[code]);
       },
       {
         enableHighAccuracy: true,
@@ -1619,7 +2002,7 @@ function App() {
         timeout: 15000,
       },
     );
-  }, [canAskOrientation]);
+  }, [canAskOrientation, text.gpsIssueMessages]);
 
   useEffect(() => {
     void startTracking(false);
@@ -1670,13 +2053,18 @@ function App() {
       },
       {
         label: text.heading,
-        value:
-          fix?.heading !== null && fix?.heading !== undefined
-            ? `${Math.round(fix.heading).toString().padStart(3, "0")}° ${compassPoint(fix.heading)}`
-            : "--",
+        value: formatHeading(fix?.heading, headingMode),
       },
     ],
-    [fix, speedUnit, text.heading, text.latitude, text.longitude, text.speed],
+    [
+      fix,
+      headingMode,
+      speedUnit,
+      text.heading,
+      text.latitude,
+      text.longitude,
+      text.speed,
+    ],
   );
 
   const marineAlert = useMemo(() => {
@@ -1771,18 +2159,20 @@ function App() {
       onChange: setShowPrecisePosition,
     },
   ];
-  const vippsDonationUrl =
-    typeof import.meta.env.VITE_VIPPS_DONATION_URL === "string"
-      ? import.meta.env.VITE_VIPPS_DONATION_URL
+  const configuredVippsPaymentUrl =
+    typeof import.meta.env.VITE_VIPPS_PAYMENT_URL === "string"
+      ? import.meta.env.VITE_VIPPS_PAYMENT_URL.trim()
       : "";
+  const vippsPaymentUrl =
+    configuredVippsPaymentUrl || DEFAULT_VIPPS_PAYMENT_URL;
 
-  const donateWithVipps = () => {
-    if (!vippsDonationUrl) {
-      window.alert(text.donateUnavailable);
+  const payWithVipps = () => {
+    if (!vippsPaymentUrl) {
+      window.alert(text.paymentUnavailable);
       return;
     }
 
-    window.location.href = vippsDonationUrl;
+    window.location.href = vippsPaymentUrl;
   };
 
   return (
@@ -1811,8 +2201,46 @@ function App() {
         </div>
       </section>
 
+      {visibleGpsIssue && (
+        <div className="gps-alert" role="alert">
+          <ShieldAlert size={17} />
+          <div>
+            <strong>{text.gpsIssueTitle}</strong>
+            <span>{visibleGpsIssue.message}</span>
+          </div>
+          <button
+            type="button"
+            className="gps-alert-action"
+            onClick={() => setGpsHelpOpen(true)}
+          >
+            {text.gpsIssueHelp}
+          </button>
+          <button
+            type="button"
+            className="gps-alert-action"
+            onClick={() => startTracking(true, true)}
+          >
+            {text.gpsIssueRetry}
+          </button>
+          <button
+            type="button"
+            className="marine-alert-close"
+            onClick={() => setDismissedGpsIssueCode(visibleGpsIssue.code)}
+            title={text.dismissGpsIssue}
+            aria-label={text.dismissGpsIssue}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       {visibleMarineAlert && marineAlertKey && (
-        <div className={`marine-alert ${visibleMarineAlert.kind}`} role="alert">
+        <div
+          className={`marine-alert ${visibleMarineAlert.kind} ${
+            visibleGpsIssue ? "below-gps-alert" : ""
+          }`}
+          role="alert"
+        >
           <ShieldAlert size={16} />
           <span>{visibleMarineAlert.message}</span>
           <button
@@ -1828,15 +2256,33 @@ function App() {
       )}
 
       <section className="readout-panel" aria-label={text.liveNavigationData}>
-          <div className="primary-depth">
-            <div>
+          <div className="readout instrument-pair primary-depth">
+            <button
+              type="button"
+              className="instrument-toggle"
+              onClick={() =>
+                setDepthUnit((current) => (current === "m" ? "ft" : "m"))
+              }
+              title={text.toggleDepthUnit}
+              aria-label={text.toggleDepthUnit}
+            >
               <span>{text.mapDepth}</span>
-              <strong>{formatDepth(depth.value)}</strong>
-            </div>
-            <div>
+              <strong>{formatDepth(depth.value, depthUnit)}</strong>
+            </button>
+            <button
+              type="button"
+              className="instrument-toggle"
+              onClick={() =>
+                setDistanceUnit((current) =>
+                  current === "metric" ? "nm" : "metric",
+                )
+              }
+              title={text.toggleDistanceUnit}
+              aria-label={text.toggleDistanceUnit}
+            >
               <span>{text.distanceToLand}</span>
-              <strong>{formatDistance(shoreline.distanceMeters)}</strong>
-            </div>
+              <strong>{formatDistance(shoreline.distanceMeters, distanceUnit)}</strong>
+            </button>
             <Waves size={28} />
           </div>
           <p className={depth.status === "error" ? "warning" : ""}>
@@ -1850,10 +2296,10 @@ function App() {
                 <strong>{item.value}</strong>
               </div>
             ))}
-            <div className="readout motion-readout">
+            <div className="readout instrument-pair motion-readout">
               <button
                 type="button"
-                className="speed-toggle"
+                className="instrument-toggle speed-toggle"
                 onClick={() =>
                   setSpeedUnit((current) => (current === "kn" ? "kmh" : "kn"))
                 }
@@ -1863,27 +2309,37 @@ function App() {
                 <span>{text.speed}</span>
                 <strong>{readouts[2].value}</strong>
               </button>
-              <div>
+              <button
+                type="button"
+                className="instrument-toggle"
+                onClick={() =>
+                  setHeadingMode((current) =>
+                    current === "full" ? "degrees" : "full",
+                  )
+                }
+                title={text.toggleHeadingMode}
+                aria-label={text.toggleHeadingMode}
+              >
                 <span>{text.heading}</span>
                 <strong>{readouts[3].value}</strong>
-              </div>
+              </button>
             </div>
           </div>
 
           <button
             type="button"
             className="accuracy"
-            onClick={() => startTracking()}
+            onClick={() => startTracking(true, true)}
             title={text.retryGps}
           >
             <div className="accuracy-target">
               <Crosshair size={18} />
-              <span className={tracking ? "status-dot active" : "status-dot"} />
+              <span className={`status-dot ${gpsStatusTone}`} />
             </div>
             <strong className="accuracy-value">
               {fix?.accuracy ? `${Math.round(fix.accuracy)} m` : "--"}
             </strong>
-            <div className="accuracy-label">{text.gpsAccuracy}</div>
+            <div className="accuracy-label">{gpsAccuracyLabel}</div>
           </button>
 
           <button
@@ -1976,13 +2432,24 @@ function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={donateWithVipps}
-                  title={text.donate}
+                  onClick={payWithVipps}
+                  title={text.payment}
                 >
-                  <HeartHandshake size={18} />
-                  <span>{text.donate}</span>
+                  <CreditCard size={18} />
+                  <span>{text.payment}</span>
                 </button>
               </div>
+              <a
+                className="vipps-qr-panel"
+                href={vippsPaymentUrl}
+                aria-label={text.payment}
+              >
+                <img src={VIPPS_QR_IMAGE_URL} alt={text.paymentQrTitle} />
+                <span>
+                  <strong>{text.paymentQrTitle}</strong>
+                  <small>{text.paymentQrDescription}</small>
+                </span>
+              </a>
             </div>
           )}
 
@@ -2018,11 +2485,16 @@ function App() {
               <button
                 type="button"
                 className={beachesVisible ? "active" : ""}
-                onClick={() => setBeachesVisible((value) => !value)}
+                data-mode={beachDisplayMode}
+                onClick={() =>
+                  setBeachDisplayMode((mode) =>
+                    mode === "off" ? "icons" : mode === "icons" ? "areas" : "off",
+                  )
+                }
                 title={text.toggleBeachAreas}
               >
                 <Waves size={20} />
-                <span>{text.beaches}</span>
+                <span>{beachLayerLabel}</span>
               </button>
             </div>
           )}
@@ -2080,6 +2552,44 @@ function App() {
           >
             {text.seaMarksSource}
           </a>
+        </section>
+      )}
+
+      {gpsHelpOpen && (
+        <section
+          className="gps-help-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gps-help-title"
+        >
+          <div className="sea-marks-header">
+            <div>
+              <strong id="gps-help-title">{text.gpsHelpTitle}</strong>
+              <span>{text.gpsHelpSubtitle}</span>
+            </div>
+            <button
+              type="button"
+              className="sea-marks-close"
+              onClick={() => setGpsHelpOpen(false)}
+              title={text.closeGpsHelp}
+              aria-label={text.closeGpsHelp}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="gps-help-grid">
+            {text.gpsHelpSections.map((section) => (
+              <article className="gps-help-card" key={section.title}>
+                <strong>{section.title}</strong>
+                <ol>
+                  {section.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </article>
+            ))}
+          </div>
         </section>
       )}
     </main>

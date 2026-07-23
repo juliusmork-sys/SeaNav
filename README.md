@@ -92,25 +92,24 @@ Forhåndsvis produksjonsbuild:
 npm run preview
 ```
 
-## Vipps-donasjon
+## Vipps-betaling
 
-Donasjonsknappen i innstillinger leser lenken fra:
+Vipps-knappen i innstillinger leser betalingslenken fra:
 
 ```bash
-VITE_VIPPS_DONATION_URL="https://..."
+VITE_VIPPS_PAYMENT_URL="https://qr.vipps.no/vp/nCQjy9dcM"
 ```
 
 Legg verdien i `.env.local` lokalt og som environment variable i Vercel.
 
 Anbefalt oppsett:
 
-1. Bruk **Vipps Donasjoner** hvis SeaNav skal samle inn pengegaver som organisasjon/forening.
-2. Opprett en innsamlingskampanje i Vipps-portalen.
-3. Kopier kampanjelenken.
-4. Sett lenken som `VITE_VIPPS_DONATION_URL`.
-5. Deploy på nytt.
+1. Bruk en vanlig Vipps-betalingslenke eller Vipps ePayment-oppsett for Getz Tech AS.
+2. Kopier betalingslenken fra Vipps-portalen.
+3. Sett lenken som `VITE_VIPPS_PAYMENT_URL`.
+4. Deploy på nytt.
 
-Hvis SeaNav ikke har tilgang til Vipps Donasjoner, kan en Vipps Payment Link brukes som midlertidig løsning, men da er det en betalingslenke og ikke Vipps sin dedikerte donasjonsløsning.
+Unngå Vipps Donasjoner for denne flyten, siden betalingen går til et kommersielt selskap.
 
 ## Deploy
 

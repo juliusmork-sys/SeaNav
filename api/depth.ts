@@ -50,7 +50,8 @@ function distanceMeters(
 
 function bboxForRadius(latitude: number, longitude: number, radiusMeters: number) {
   const latDelta = radiusMeters / 111320;
-  const lonDelta = radiusMeters / (111320 * Math.cos(toRadians(latitude)));
+  const lonDelta =
+    radiusMeters / (111320 * Math.max(Math.cos(toRadians(latitude)), 0.01));
   return {
     south: latitude - latDelta,
     west: longitude - lonDelta,

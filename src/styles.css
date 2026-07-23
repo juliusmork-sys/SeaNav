@@ -592,6 +592,265 @@ button {
   gap: 6px;
 }
 
+.settings-actions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.settings-actions button {
+  display: flex;
+  min-width: 0;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(188, 225, 235, 0.16);
+  border-radius: 7px;
+  color: #dff5fb;
+  background: rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.settings-actions button:hover,
+.settings-actions button:focus-visible {
+  outline: none;
+  border-color: rgba(94, 231, 255, 0.75);
+  background: rgba(94, 231, 255, 0.16);
+}
+
+.settings-actions span {
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sea-marks-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  color: #061923;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(251, 253, 251, 0.98) 0%,
+      rgba(226, 242, 238, 0.98) 48%,
+      rgba(237, 244, 232, 0.98) 100%
+    );
+}
+
+.sea-marks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1060px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.sea-marks-header strong {
+  display: block;
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.sea-marks-header span {
+  display: block;
+  margin-top: 3px;
+  color: #476572;
+  font-size: 0.86rem;
+}
+
+.sea-marks-close {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(70, 98, 110, 0.32);
+  border-radius: 8px;
+  color: #0b2733;
+  background: rgba(255, 255, 255, 0.76);
+  cursor: pointer;
+}
+
+.sea-marks-close:hover,
+.sea-marks-close:focus-visible {
+  outline: none;
+  border-color: rgba(0, 99, 124, 0.72);
+  background: rgba(208, 244, 250, 0.92);
+}
+
+.sea-marks-grid {
+  display: grid;
+  max-width: 1060px;
+  width: 100%;
+  min-height: 0;
+  grid-template-columns: repeat(auto-fit, minmax(236px, 1fr));
+  gap: 10px;
+  margin: 0 auto;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sea-mark-card {
+  display: grid;
+  min-height: 122px;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(70, 98, 110, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.sea-mark-card strong {
+  display: block;
+  color: #061923;
+  font-size: 0.86rem;
+  line-height: 1.15;
+}
+
+.sea-mark-card span {
+  display: block;
+  margin-top: 4px;
+  color: #274653;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.sea-mark-card p {
+  margin: 7px 0 0;
+  color: #476572;
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.sea-mark-symbol {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 76px;
+  justify-self: center;
+  place-items: center;
+}
+
+.sea-mark-symbol::before {
+  width: 28px;
+  height: 54px;
+  border: 2px solid rgba(6, 25, 35, 0.24);
+  border-radius: 999px 999px 7px 7px;
+  content: "";
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgba(11, 35, 46, 0.16);
+}
+
+.sea-mark-symbol span {
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: #0b2733;
+}
+
+.sea-mark-symbol.port::before {
+  background: #cf2323;
+}
+
+.sea-mark-symbol.starboard::before {
+  background: #138a45;
+}
+
+.sea-mark-symbol.north::before {
+  background: linear-gradient(to bottom, #101820 0 50%, #f2c94c 50% 100%);
+}
+
+.sea-mark-symbol.south::before {
+  background: linear-gradient(to bottom, #f2c94c 0 50%, #101820 50% 100%);
+}
+
+.sea-mark-symbol.east::before {
+  background:
+    linear-gradient(
+      to bottom,
+      #101820 0 34%,
+      #f2c94c 34% 66%,
+      #101820 66% 100%
+    );
+}
+
+.sea-mark-symbol.west::before {
+  background:
+    linear-gradient(
+      to bottom,
+      #f2c94c 0 34%,
+      #101820 34% 66%,
+      #f2c94c 66% 100%
+    );
+}
+
+.sea-mark-symbol.special::before {
+  background: #f2c94c;
+}
+
+.sea-mark-symbol.danger::before {
+  background:
+    linear-gradient(
+      to bottom,
+      #101820 0 34%,
+      #cf2323 34% 66%,
+      #101820 66% 100%
+    );
+}
+
+.sea-mark-symbol.safe::before {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #cf2323 0 7px,
+      #ffffff 7px 14px
+    );
+}
+
+.sea-mark-symbol.fixed::before {
+  width: 10px;
+  border-radius: 3px;
+  background: #0b2733;
+}
+
+.sea-marks-source {
+  max-width: 1060px;
+  width: 100%;
+  margin: 0 auto;
+  color: #006b86;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.sea-marks-source:hover,
+.sea-marks-source:focus-visible {
+  text-decoration: underline;
+}
+
 .primary-depth small {
   display: block;
   margin-top: 10px;
@@ -2719,6 +2978,7 @@ button {
 .notice,
 .location-mode-button,
 .panel-actions button,
+.settings-actions button,
 .embedded-controls button,
 .controls button,
 .menu-toggle {
@@ -2749,6 +3009,7 @@ button {
 .location-mode-button,
 .motion-readout,
 .panel-actions button,
+.settings-actions button,
 .embedded-controls button,
 .controls button {
   border-color: rgba(70, 98, 110, 0.28);
@@ -2773,7 +3034,8 @@ button {
 .accuracy,
 .location-mode-button,
 .motion-readout,
-.panel-actions button {
+.panel-actions button,
+.settings-actions button {
   background: rgba(255, 255, 255, 0.66);
   backdrop-filter: blur(12px);
   box-shadow:
@@ -2783,6 +3045,8 @@ button {
 
 .panel-actions button:hover,
 .panel-actions button:focus-visible,
+.settings-actions button:hover,
+.settings-actions button:focus-visible,
 .embedded-controls button:hover,
 .embedded-controls button:focus-visible,
 .controls button:hover,
@@ -2796,6 +3060,7 @@ button {
 }
 
 .panel-actions button.active,
+.settings-actions button.active,
 .embedded-controls button.active,
 .controls button.active,
 .location-mode-button.active {
@@ -3059,6 +3324,21 @@ button {
 @media (max-width: 820px) and (orientation: portrait) {
   .embedded-controls {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .primary-depth {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .motion-readout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .motion-readout > * + * {
+    border-top: 1px solid rgba(70, 98, 110, 0.18);
+    border-left: 0;
   }
 
   .marine-alert {

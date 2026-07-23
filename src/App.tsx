@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { Map } from "maplibre-gl";
 import {
   Anchor,
+  BookOpen,
   Crosshair,
+  HeartHandshake,
   Layers,
   LocateFixed,
   Map as MapIcon,
@@ -34,6 +36,11 @@ type DepthEstimate = {
   message: string;
 };
 
+type ShorelineState = {
+  status: "idle" | "loading" | "ready" | "error";
+  distanceMeters: number | null;
+};
+
 type BeachFeatureCollection = GeoJSON.FeatureCollection<
   GeoJSON.Geometry,
   Record<string, unknown>
@@ -57,6 +64,12 @@ type BeachState = {
 
 type Language = "no" | "en";
 type SpeedUnit = "kn" | "kmh";
+type SeaMark = {
+  title: string;
+  description: string;
+  detail: string;
+  className: string;
+};
 
 type CameraPadding = {
   top: number;
@@ -102,6 +115,76 @@ const UI_TEXT = {
     ownshipMarker: "Egen posisjon",
     safetyNotice: "Sikkerhetsvarsel",
     alertSound: "Varsellyd",
+    seaMarks: "Sjømerker",
+    openSeaMarks: "Åpne oversikt over sjømerker",
+    donate: "Doner med Vipps",
+    donateUnavailable: "Vipps-lenke er ikke satt opp ennå.",
+    closeSeaMarks: "Lukk sjømerker",
+    seaMarksTitle: "Sjømerker",
+    seaMarksSubtitle: "Norge bruker IALA region A.",
+    seaMarksSource: "Kilde: Kystverket",
+    seaMarksList: [
+      {
+        title: "Babord lateralmerke",
+        description: "Rødt merke.",
+        detail: "Holdes på babord side i merkets hovedretning.",
+        className: "port",
+      },
+      {
+        title: "Styrbord lateralmerke",
+        description: "Grønt merke.",
+        detail: "Holdes på styrbord side i merkets hovedretning.",
+        className: "starboard",
+      },
+      {
+        title: "Nord kardinalmerke",
+        description: "Svart over gult.",
+        detail: "Trygt farvann ligger nord for merket.",
+        className: "north",
+      },
+      {
+        title: "Sør kardinalmerke",
+        description: "Gult over svart.",
+        detail: "Trygt farvann ligger sør for merket.",
+        className: "south",
+      },
+      {
+        title: "Øst kardinalmerke",
+        description: "Svart med gult belte.",
+        detail: "Trygt farvann ligger øst for merket.",
+        className: "east",
+      },
+      {
+        title: "Vest kardinalmerke",
+        description: "Gult med svart belte.",
+        detail: "Trygt farvann ligger vest for merket.",
+        className: "west",
+      },
+      {
+        title: "Spesialmerke",
+        description: "Gult merke.",
+        detail: "Brukes for særskilte områder, ofte med begrensninger.",
+        className: "special",
+      },
+      {
+        title: "Frittliggende grunne/fare",
+        description: "Svart med røde belter.",
+        detail: "Farvannet rundt er seilbart, men fare finnes ved merket.",
+        className: "danger",
+      },
+      {
+        title: "Senterledsmerke",
+        description: "Røde og hvite vertikale striper.",
+        detail: "Markerer trygt farvann eller midt i leden.",
+        className: "safe",
+      },
+      {
+        title: "Fast merke",
+        description: "Stang, varde eller båke.",
+        detail: "Viser peker normalt mot sikkert farvann.",
+        className: "fixed",
+      },
+    ] satisfies SeaMark[],
     beachAreas: "Badeplasser",
     dismissAlert: "Lukk varsel",
     showStandardMap: "Vis standard kart",
@@ -119,8 +202,8 @@ const UI_TEXT = {
       `Badeplass nær deg: maks 5 kn ved ${name} (${distance} m)`,
     beachNearby: (name: string, distance: number) =>
       `Badeplass nær deg: ${name} (${distance} m)`,
-    shallowWaterWarning: (depth: number) =>
-      `Grunt område: antatt dybde ${depth.toFixed(1)} m`,
+    shallowWaterWarning: (depth: number, distance: number) =>
+      `Grunt område foran: antatt dybde ${depth.toFixed(1)} m om ${distance} m`,
     safetyNoticeText:
       "Kun situasjonsforståelse. Ikke godkjent for navigasjon.",
   },
@@ -160,6 +243,76 @@ const UI_TEXT = {
     ownshipMarker: "Ownship marker",
     safetyNotice: "Safety notice",
     alertSound: "Alert sound",
+    seaMarks: "Sea marks",
+    openSeaMarks: "Open sea mark overview",
+    donate: "Donate with Vipps",
+    donateUnavailable: "Vipps donation link is not configured yet.",
+    closeSeaMarks: "Close sea marks",
+    seaMarksTitle: "Sea marks",
+    seaMarksSubtitle: "Norway uses IALA region A.",
+    seaMarksSource: "Source: Kystverket",
+    seaMarksList: [
+      {
+        title: "Port lateral mark",
+        description: "Red mark.",
+        detail: "Kept to port in the main direction of buoyage.",
+        className: "port",
+      },
+      {
+        title: "Starboard lateral mark",
+        description: "Green mark.",
+        detail: "Kept to starboard in the main direction of buoyage.",
+        className: "starboard",
+      },
+      {
+        title: "North cardinal mark",
+        description: "Black over yellow.",
+        detail: "Safe water is north of the mark.",
+        className: "north",
+      },
+      {
+        title: "South cardinal mark",
+        description: "Yellow over black.",
+        detail: "Safe water is south of the mark.",
+        className: "south",
+      },
+      {
+        title: "East cardinal mark",
+        description: "Black with a yellow band.",
+        detail: "Safe water is east of the mark.",
+        className: "east",
+      },
+      {
+        title: "West cardinal mark",
+        description: "Yellow with a black band.",
+        detail: "Safe water is west of the mark.",
+        className: "west",
+      },
+      {
+        title: "Special mark",
+        description: "Yellow mark.",
+        detail: "Used for special areas, often with restrictions.",
+        className: "special",
+      },
+      {
+        title: "Isolated danger mark",
+        description: "Black with red bands.",
+        detail: "Navigable water around the mark, but danger at the mark.",
+        className: "danger",
+      },
+      {
+        title: "Safe water mark",
+        description: "Red and white vertical stripes.",
+        detail: "Marks safe water or centre of fairway.",
+        className: "safe",
+      },
+      {
+        title: "Fixed mark",
+        description: "Pole, cairn or beacon.",
+        detail: "The pointer normally points toward safe water.",
+        className: "fixed",
+      },
+    ] satisfies SeaMark[],
     beachAreas: "Bathing areas",
     dismissAlert: "Dismiss alert",
     showStandardMap: "Show standard map",
@@ -177,8 +330,8 @@ const UI_TEXT = {
       `Bathing area nearby: max 5 kn at ${name} (${distance} m)`,
     beachNearby: (name: string, distance: number) =>
       `Bathing area nearby: ${name} (${distance} m)`,
-    shallowWaterWarning: (depth: number) =>
-      `Shallow area: estimated depth ${depth.toFixed(1)} m`,
+    shallowWaterWarning: (depth: number, distance: number) =>
+      `Shallow area ahead: estimated depth ${depth.toFixed(1)} m in ${distance} m`,
     safetyNoticeText:
       "Situational awareness only. Not certified navigation.",
   },
@@ -194,6 +347,10 @@ const DEFAULT_DEPTH_STATE: DepthState = {
   status: "idle",
   value: null,
   message: UI_TEXT.no.waitingForPosition,
+};
+const DEFAULT_SHORELINE_STATE: ShorelineState = {
+  status: "idle",
+  distanceMeters: null,
 };
 const EMPTY_FEATURE_COLLECTION: BeachFeatureCollection = {
   type: "FeatureCollection",
@@ -229,6 +386,42 @@ const normalizeBearing = (degrees: number) => (degrees + 360) % 360;
 
 function distanceMeters(a: PositionFix, latitude: number, longitude: number) {
   return distanceBetweenCoordinates(a.latitude, a.longitude, latitude, longitude);
+}
+
+function destinationPoint(
+  latitude: number,
+  longitude: number,
+  bearing: number,
+  distanceMetersValue: number,
+) {
+  const angularDistance = distanceMetersValue / 6371008.8;
+  const bearingRadians = toRadians(bearing);
+  const latitudeRadians = toRadians(latitude);
+  const longitudeRadians = toRadians(longitude);
+  const nextLatitude = Math.asin(
+    Math.sin(latitudeRadians) * Math.cos(angularDistance) +
+      Math.cos(latitudeRadians) *
+        Math.sin(angularDistance) *
+        Math.cos(bearingRadians),
+  );
+  const nextLongitude =
+    longitudeRadians +
+    Math.atan2(
+      Math.sin(bearingRadians) *
+        Math.sin(angularDistance) *
+        Math.cos(latitudeRadians),
+      Math.cos(angularDistance) -
+        Math.sin(latitudeRadians) * Math.sin(nextLatitude),
+    );
+
+  return {
+    latitude: toDegrees(nextLatitude),
+    longitude: normalizeLongitude(toDegrees(nextLongitude)),
+  };
+}
+
+function normalizeLongitude(longitude: number) {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
 }
 
 function distanceBetweenCoordinates(
@@ -303,6 +496,18 @@ function formatPreciseCoordinate(
 function formatDepth(value: number | null) {
   if (value === null || Number.isNaN(value)) return "--";
   return `${Math.abs(value).toFixed(1)} m`;
+}
+
+function formatDistance(value: number | null) {
+  if (value === null || Number.isNaN(value)) return "--";
+  if (value >= 1000) return `${(value / 1000).toFixed(1)} km`;
+  return `${Math.round(value)} m`;
+}
+
+function getShallowLookaheadDistance(speedKnots: number | null | undefined) {
+  const metersPerSecond =
+    speedKnots !== null && speedKnots !== undefined ? speedKnots / 1.943844492 : 0;
+  return Math.round(Math.min(250, Math.max(80, metersPerSecond * 30)));
 }
 
 function formatSpeed(speedKnots: number | null | undefined, unit: SpeedUnit) {
@@ -466,7 +671,7 @@ function createAccuracyCircle(
   longitude: number,
   latitude: number,
   radiusMeters: number,
-) {
+): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
   const points = 96;
   const coordinates: number[][] = [];
   const earthRadius = 6378137;
@@ -624,6 +829,26 @@ async function fetchNearbyBeaches(
   >;
 }
 
+async function fetchDistanceToLand(latitude: number, longitude: number) {
+  const response = await fetch(
+    `/api/shoreline?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`,
+  );
+
+  if (!response.ok) {
+    throw new Error("Shoreline service unavailable");
+  }
+
+  const payload = (await response.json()) as {
+    distanceMeters?: unknown;
+  };
+
+  if (typeof payload.distanceMeters !== "number") {
+    throw new Error("Shoreline service returned no distance");
+  }
+
+  return payload.distanceMeters;
+}
+
 function App() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
@@ -631,8 +856,17 @@ function App() {
   const lastFixRef = useRef<PositionFix | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const depthAbortRef = useRef<number | null>(null);
-  const beachAbortRef = useRef<number | null>(null);
-  const beachQueryRef = useRef<{
+  const shallowAheadAbortRef = useRef<number | null>(null);
+  const shorelineAbortRef = useRef<number | null>(null);
+  const beachPositionAbortRef = useRef<number | null>(null);
+  const beachMapAbortRef = useRef<number | null>(null);
+  const beachPositionQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    timestamp: number;
+  } | null>(null);
+  const beachMapQueryRef = useRef<{
     latitude: number;
     longitude: number;
     radiusMeters: number;
@@ -642,6 +876,12 @@ function App() {
   const orientationHeadingRef = useRef<number | null>(null);
   const [fix, setFix] = useState<PositionFix | null>(null);
   const [depth, setDepth] = useState<DepthState>(DEFAULT_DEPTH_STATE);
+  const [shallowAheadDepth, setShallowAheadDepth] = useState<DepthState>(
+    DEFAULT_DEPTH_STATE,
+  );
+  const [shoreline, setShoreline] = useState<ShorelineState>(
+    DEFAULT_SHORELINE_STATE,
+  );
   const [beaches, setBeaches] = useState<BeachState>(DEFAULT_BEACH_STATE);
   const [language, setLanguage] = useState<Language>(() => {
     if (typeof window === "undefined") return "no";
@@ -658,6 +898,7 @@ function App() {
   const [baseMap, setBaseMap] = useState<"map" | "satellite">("map");
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [seaMarksOpen, setSeaMarksOpen] = useState(false);
   const [showOwnship, setShowOwnship] = useState(true);
   const [showAccuracyRing, setShowAccuracyRing] = useState(true);
   const [showNotice, setShowNotice] = useState(true);
@@ -738,10 +979,16 @@ function App() {
   );
 
   const refreshBeaches = useCallback(
-    (latitude: number, longitude: number, radiusMeters = 2000) => {
+    (
+      latitude: number,
+      longitude: number,
+      radiusMeters = 2000,
+      updateNearest = true,
+    ) => {
       if (!beachesVisible) return;
 
-      const lastQuery = beachQueryRef.current;
+      const queryRef = updateNearest ? beachPositionQueryRef : beachMapQueryRef;
+      const lastQuery = queryRef.current;
       if (
         lastQuery &&
         Date.now() - lastQuery.timestamp < 120000 &&
@@ -756,15 +1003,17 @@ function App() {
         return;
       }
 
-      if (beachAbortRef.current) {
-        window.clearTimeout(beachAbortRef.current);
+      const abortRef = updateNearest ? beachPositionAbortRef : beachMapAbortRef;
+      if (abortRef.current) {
+        window.clearTimeout(abortRef.current);
       }
 
-      beachQueryRef.current = {
+      const requestedAt = Date.now();
+      queryRef.current = {
         latitude,
         longitude,
         radiusMeters,
-        timestamp: Date.now(),
+        timestamp: requestedAt,
       };
 
       setBeaches((current) => ({
@@ -772,21 +1021,43 @@ function App() {
         status: "loading",
       }));
 
-      beachAbortRef.current = window.setTimeout(() => {
+      abortRef.current = window.setTimeout(() => {
         fetchNearbyBeaches(latitude, longitude, radiusMeters)
           .then((result) => {
-            setBeaches({
+            const latestQuery = queryRef.current;
+            if (
+              !latestQuery ||
+              latestQuery.timestamp !== requestedAt ||
+              latestQuery.latitude !== latitude ||
+              latestQuery.longitude !== longitude ||
+              latestQuery.radiusMeters !== radiusMeters
+            ) {
+              return;
+            }
+
+            setBeaches((current) => ({
               status: "ready",
-              nearest: result.nearest,
+              nearest: updateNearest ? result.nearest : current.nearest,
               featureCollection: result.featureCollection,
               markerFeatureCollection: result.markerFeatureCollection,
-            });
+            }));
           })
           .catch(() => {
+            const latestQuery = queryRef.current;
+            if (
+              !latestQuery ||
+              latestQuery.timestamp !== requestedAt ||
+              latestQuery.latitude !== latitude ||
+              latestQuery.longitude !== longitude ||
+              latestQuery.radiusMeters !== radiusMeters
+            ) {
+              return;
+            }
+
             setBeaches((current) => ({
               ...current,
               status: "error",
-              nearest: null,
+              nearest: updateNearest ? null : current.nearest,
             }));
           });
       }, 450);
@@ -969,8 +1240,17 @@ function App() {
       if (depthAbortRef.current !== null) {
         window.clearTimeout(depthAbortRef.current);
       }
-      if (beachAbortRef.current !== null) {
-        window.clearTimeout(beachAbortRef.current);
+      if (shallowAheadAbortRef.current !== null) {
+        window.clearTimeout(shallowAheadAbortRef.current);
+      }
+      if (shorelineAbortRef.current !== null) {
+        window.clearTimeout(shorelineAbortRef.current);
+      }
+      if (beachPositionAbortRef.current !== null) {
+        window.clearTimeout(beachPositionAbortRef.current);
+      }
+      if (beachMapAbortRef.current !== null) {
+        window.clearTimeout(beachMapAbortRef.current);
       }
       map.off("rotate", syncMapBearing);
       map.off("move", syncMapBearing);
@@ -1094,6 +1374,78 @@ function App() {
 
   useEffect(() => {
     if (!fix) return;
+
+    if (shorelineAbortRef.current) {
+      window.clearTimeout(shorelineAbortRef.current);
+    }
+
+    setShoreline((current) => ({
+      ...current,
+      status: "loading",
+    }));
+
+    shorelineAbortRef.current = window.setTimeout(() => {
+      fetchDistanceToLand(fix.latitude, fix.longitude)
+        .then((distanceMeters) => {
+          setShoreline({
+            status: "ready",
+            distanceMeters,
+          });
+        })
+        .catch(() => {
+          setShoreline({
+            status: "error",
+            distanceMeters: null,
+          });
+        });
+    }, 900);
+  }, [fix]);
+
+  useEffect(() => {
+    if (!fix || fix.heading === null) {
+      setShallowAheadDepth(DEFAULT_DEPTH_STATE);
+      return;
+    }
+
+    if (shallowAheadAbortRef.current) {
+      window.clearTimeout(shallowAheadAbortRef.current);
+    }
+
+    const lookaheadMeters = getShallowLookaheadDistance(fix.speedKnots);
+    const ahead = destinationPoint(
+      fix.latitude,
+      fix.longitude,
+      fix.heading,
+      lookaheadMeters,
+    );
+
+    setShallowAheadDepth((current) => ({
+      ...current,
+      status: "loading",
+      message: text.updatingEstimate,
+    }));
+
+    shallowAheadAbortRef.current = window.setTimeout(() => {
+      fetchEstimatedDepth(ahead.latitude, ahead.longitude, language)
+        .then((estimate) => {
+          setShallowAheadDepth({
+            status: "ready",
+            value: estimate.value,
+            message: estimate.message,
+          });
+        })
+        .catch(() => {
+          setShallowAheadDepth({
+            status: "error",
+            value: null,
+            message: text.depthUnavailable,
+          });
+        });
+    }, 950);
+  }, [fix, language, text.depthUnavailable, text.updatingEstimate]);
+
+  useEffect(() => {
+    if (!fix) return;
     refreshBeaches(fix.latitude, fix.longitude, 2000);
   }, [fix, refreshBeaches]);
 
@@ -1104,7 +1456,7 @@ function App() {
 
     const refreshFromMapCenter = () => {
       const center = map.getCenter();
-      refreshBeaches(center.lat, center.lng, getBeachSearchRadius(map));
+      refreshBeaches(center.lat, center.lng, getBeachSearchRadius(map), false);
     };
 
     if (map.loaded()) {
@@ -1311,14 +1663,17 @@ function App() {
     }
 
     if (
-      depth.status === "ready" &&
-      depth.value !== null &&
-      depth.value <= 3 &&
+      shallowAheadDepth.status === "ready" &&
+      shallowAheadDepth.value !== null &&
+      shallowAheadDepth.value <= 3 &&
       speedKnots > 1
     ) {
       return {
         kind: "caution",
-        message: text.shallowWaterWarning(depth.value),
+        message: text.shallowWaterWarning(
+          shallowAheadDepth.value,
+          getShallowLookaheadDistance(fix?.speedKnots),
+        ),
       };
     }
 
@@ -1326,9 +1681,9 @@ function App() {
   }, [
     beaches.nearest,
     beachesVisible,
-    depth.status,
-    depth.value,
     fix?.speedKnots,
+    shallowAheadDepth.status,
+    shallowAheadDepth.value,
     showNotice,
     text,
   ]);
@@ -1377,6 +1732,19 @@ function App() {
       onChange: setShowPrecisePosition,
     },
   ];
+  const vippsDonationUrl =
+    typeof import.meta.env.VITE_VIPPS_DONATION_URL === "string"
+      ? import.meta.env.VITE_VIPPS_DONATION_URL
+      : "";
+
+  const donateWithVipps = () => {
+    if (!vippsDonationUrl) {
+      window.alert(text.donateUnavailable);
+      return;
+    }
+
+    window.location.href = vippsDonationUrl;
+  };
 
   return (
     <main className="app-shell">
@@ -1428,7 +1796,7 @@ function App() {
             </div>
             <div>
               <span>{text.distanceToLand}</span>
-              <strong>--</strong>
+              <strong>{formatDistance(shoreline.distanceMeters)}</strong>
             </div>
             <Waves size={28} />
           </div>
@@ -1558,6 +1926,24 @@ function App() {
                   />
                 </label>
               ))}
+              <div className="settings-actions">
+                <button
+                  type="button"
+                  onClick={() => setSeaMarksOpen(true)}
+                  title={text.openSeaMarks}
+                >
+                  <BookOpen size={18} />
+                  <span>{text.seaMarks}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={donateWithVipps}
+                  title={text.donate}
+                >
+                  <HeartHandshake size={18} />
+                  <span>{text.donate}</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -1613,6 +1999,50 @@ function App() {
             </div>
           )}
         </section>
+
+      {seaMarksOpen && (
+        <section className="sea-marks-modal" role="dialog" aria-modal="true" aria-labelledby="sea-marks-title">
+          <div className="sea-marks-header">
+            <div>
+              <strong id="sea-marks-title">{text.seaMarksTitle}</strong>
+              <span>{text.seaMarksSubtitle}</span>
+            </div>
+            <button
+              type="button"
+              className="sea-marks-close"
+              onClick={() => setSeaMarksOpen(false)}
+              title={text.closeSeaMarks}
+              aria-label={text.closeSeaMarks}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="sea-marks-grid">
+            {text.seaMarksList.map((mark) => (
+              <article className="sea-mark-card" key={mark.title}>
+                <div className={`sea-mark-symbol ${mark.className}`} aria-hidden="true">
+                  <span />
+                </div>
+                <div>
+                  <strong>{mark.title}</strong>
+                  <span>{mark.description}</span>
+                  <p>{mark.detail}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <a
+            className="sea-marks-source"
+            href="https://www.kystverket.no/navigasjonstjenester/sjomerker-og-navigasjonsinstallasjoner/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {text.seaMarksSource}
+          </a>
+        </section>
+      )}
     </main>
   );
 }

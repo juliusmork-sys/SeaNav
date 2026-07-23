@@ -95,6 +95,20 @@ function pointToLocalMeters(
   };
 }
 
+function localMetersToPoint(
+  point: { x: number; y: number },
+  originLongitude: number,
+  originLatitude: number,
+) {
+  return {
+    longitude:
+      originLongitude +
+      point.x /
+        (111320 * Math.max(Math.cos(toRadians(originLatitude)), 0.01)),
+    latitude: originLatitude + point.y / 111320,
+  };
+}
+
 function distanceToSegment(
   point: { x: number; y: number },
   start: { x: number; y: number },
@@ -118,6 +132,30 @@ function distanceToSegment(
   };
 
   return Math.hypot(point.x - projection.x, point.y - projection.y);
+}
+
+function nearestPointOnSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+
+  if (lengthSquared === 0) {
+    return start;
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared),
+  );
+
+  return {
+    x: start.x + t * dx,
+    y: start.y + t * dy,
+  };
 }
 
 function pointInRing(point: { x: number; y: number }, ring: { x: number; y: number }[]) {
@@ -207,6 +245,43 @@ function polygonCenter(coordinates: number[][][]) {
   ] satisfies [number, number];
 }
 
+function nearestPointOnPolygon(
+  coordinates: number[][][],
+  latitude: number,
+  longitude: number,
+) {
+  const center = polygonCenter(coordinates);
+  const point = { x: 0, y: 0 };
+  const rings = coordinates.map((ring) =>
+    ring.map(([ringLongitude, ringLatitude]) =>
+      pointToLocalMeters(ringLongitude, ringLatitude, longitude, latitude),
+    ),
+  );
+
+  const outerRing = rings[0];
+  if (outerRing && pointInRing(point, outerRing)) {
+    const insideHole = rings.slice(1).some((ring) => pointInRing(point, ring));
+    if (!insideHole) return center;
+  }
+
+  let nearest: { x: number; y: number } | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const ring of rings) {
+    for (let index = 1; index < ring.length; index += 1) {
+      const candidate = nearestPointOnSegment(point, ring[index - 1], ring[index]);
+      const distance = Math.hypot(candidate.x, candidate.y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = candidate;
+      }
+    }
+  }
+
+  if (!nearest) return center;
+  const nearestPoint = localMetersToPoint(nearest, longitude, latitude);
+  return [nearestPoint.longitude, nearestPoint.latitude] satisfies [number, number];
+}
+
 function geometryCenter(geometry: Geometry | null) {
   if (!geometry) return null;
 
@@ -233,6 +308,29 @@ function geometryCenter(geometry: Geometry | null) {
   ] satisfies [number, number];
 }
 
+function geometryMarkerPoint(
+  geometry: Geometry | null,
+  latitude: number,
+  longitude: number,
+) {
+  if (!geometry) return null;
+
+  if (geometry.type === "Polygon") {
+    return nearestPointOnPolygon(geometry.coordinates, latitude, longitude);
+  }
+
+  const points = geometry.coordinates
+    .map((polygon) => nearestPointOnPolygon(polygon, latitude, longitude))
+    .filter((point): point is [number, number] => point !== null)
+    .sort(
+      (a, b) =>
+        Math.hypot(a[0] - longitude, a[1] - latitude) -
+        Math.hypot(b[0] - longitude, b[1] - latitude),
+    );
+
+  return points[0] ?? geometryCenter(geometry);
+}
+
 function buildBeachUrl(latitude: number, longitude: number, radiusMeters: number) {
   const bbox = bboxForRadius(latitude, longitude, radiusMeters);
   const params = new URLSearchParams({
@@ -253,7 +351,9 @@ function buildBeachUrl(latitude: number, longitude: number, radiusMeters: number
 }
 
 function getString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value : null;
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
 }
 
 function findNearestBeach(
@@ -285,11 +385,13 @@ function findNearestBeach(
 
 function createBeachMarkers(
   collection: BeachFeatureCollection,
+  latitude: number,
+  longitude: number,
 ): BeachMarkerFeatureCollection {
   return {
     type: "FeatureCollection",
     features: collection.features.flatMap((feature) => {
-      const center = geometryCenter(feature.geometry);
+      const center = geometryMarkerPoint(feature.geometry, latitude, longitude);
       if (!center) return [];
 
       const properties = feature.properties ?? {};
@@ -365,7 +467,11 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       radiusMeters,
       nearest: findNearestBeach(safeCollection, latitude, longitude, radiusMeters),
       featureCollection: safeCollection,
-      markerFeatureCollection: createBeachMarkers(safeCollection),
+      markerFeatureCollection: createBeachMarkers(
+        safeCollection,
+        latitude,
+        longitude,
+      ),
     });
   } catch (error) {
     response.status(502).json({

@@ -2800,7 +2800,7 @@ function NavigationApp() {
         </div>
       </section>
 
-      {weatherOpen && !controlsOpen && (
+      {weatherOpen && (
         <section className="weather-card map-weather-card" aria-label={text.weatherHere}>
           <div className="weather-card-heading">
             <CloudSun size={18} />

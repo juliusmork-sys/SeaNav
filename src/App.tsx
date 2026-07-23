@@ -941,6 +941,45 @@ function App() {
     );
   }, [alertSoundEnabled]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const updateMobileChromeOffset = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+
+      const coveredBottom = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop,
+      );
+
+      document.documentElement.style.setProperty(
+        "--mobile-browser-bottom-offset",
+        `${Math.round(coveredBottom)}px`,
+      );
+    };
+
+    updateMobileChromeOffset();
+    window.visualViewport.addEventListener("resize", updateMobileChromeOffset);
+    window.visualViewport.addEventListener("scroll", updateMobileChromeOffset);
+    window.addEventListener("orientationchange", updateMobileChromeOffset);
+
+    return () => {
+      window.visualViewport?.removeEventListener(
+        "resize",
+        updateMobileChromeOffset,
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        updateMobileChromeOffset,
+      );
+      window.removeEventListener("orientationchange", updateMobileChromeOffset);
+      document.documentElement.style.removeProperty(
+        "--mobile-browser-bottom-offset",
+      );
+    };
+  }, []);
+
   const setPositionOnMap = useCallback(
     (nextFix: PositionFix) => {
       const map = mapRef.current;

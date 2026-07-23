@@ -8,6 +8,10 @@ Dette er prosjektminne for SeaNav. Bruk det som praktisk kontekst før du gjør 
 - Norsk er primærspråk. Engelsk finnes som valg i innstillinger.
 - Appen deployes til Vercel og er tilgjengelig på `https://www.seanav.no`.
 - Vercel-prosjektet er koblet lokalt via `.vercel/`.
+- Forsiden er en egen landingsvisning på `/`.
+- CTA-er åpner navigasjonsappen på `/#navigasjon`. Behold hash-inngangen slik at nettleserens tilbakeknapp fungerer.
+- Hero-motivet ligger i `public/seanav-hero.png`.
+- Landingssidens hovedbudskap er enkel navigering uten innlogging eller abonnement. SeaNav er ikke «enda en app», men sjøkart og navigasjon rett i nettleseren.
 
 ## Git
 

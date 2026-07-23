@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { Map } from "maplibre-gl";
 import {
   Anchor,
+  ArrowRight,
   BookOpen,
+  CircleDollarSign,
+  Compass,
   Crosshair,
   HeartHandshake,
   Layers,
@@ -11,6 +14,7 @@ import {
   Satellite,
   ShieldAlert,
   SlidersHorizontal,
+  UserRoundX,
   X,
   Waves,
 } from "lucide-react";
@@ -95,6 +99,7 @@ type CameraPadding = {
 
 const DEFAULT_VIPPS_PAYMENT_URL = "https://qr.vipps.no/vp/nCQjy9dcM";
 const VIPPS_QR_IMAGE_URL = "/vipps-qr.png";
+const HERO_IMAGE_URL = "/seanav-hero.png";
 
 const UI_TEXT = {
   no: {
@@ -1051,7 +1056,96 @@ async function fetchDistanceToLand(latitude: number, longitude: number) {
   return payload.distanceMeters;
 }
 
-function App() {
+function LandingPage({ onStart }: { onStart: () => void }) {
+  return (
+    <main className="landing-page">
+      <section className="landing-hero">
+        <img
+          className="landing-hero-image"
+          src={HERO_IMAGE_URL}
+          alt="Fritidsbåt på vei gjennom norsk skjærgård"
+        />
+        <div className="landing-hero-shade" aria-hidden="true" />
+
+        <header className="landing-header">
+          <a className="landing-brand" href="#" aria-label="SeaNav forside">
+            <span className="landing-brand-mark">
+              <Anchor size={21} strokeWidth={2.4} />
+            </span>
+            <span>SeaNav</span>
+          </a>
+          <button className="landing-header-cta" type="button" onClick={onStart}>
+            Åpne sjøkart
+            <ArrowRight size={17} />
+          </button>
+        </header>
+
+        <div className="landing-hero-content">
+          <p className="landing-eyebrow">Enklere navigering på sjøen</p>
+          <h1>SeaNav</h1>
+          <p className="landing-statement">Ikke enda en app.</p>
+          <p className="landing-intro">
+            Ingen innlogging. Ikke noe abonnement. Bare enkel navigering og
+            sjøkart, klart når du trenger det.
+          </p>
+          <div className="landing-actions">
+            <button className="landing-primary-cta" type="button" onClick={onStart}>
+              Start gratis navigering
+              <ArrowRight size={19} />
+            </button>
+            <span>Gratis å bruke. Rett i nettleseren.</span>
+          </div>
+        </div>
+
+        <a className="landing-scroll-cue" href="#slik-virker-det">
+          <span>Se hvorfor SeaNav er enklere</span>
+          <span className="landing-scroll-line" aria-hidden="true" />
+        </a>
+      </section>
+
+      <section className="landing-principles" id="slik-virker-det">
+        <div className="landing-section-intro">
+          <p>Alt du trenger. Ingenting i veien.</p>
+          <h2>Fra land til sjøkart på ett trykk.</h2>
+        </div>
+
+        <div className="landing-principle-grid">
+          <article>
+            <UserRoundX size={24} />
+            <span>01</span>
+            <h3>Ingen innlogging</h3>
+            <p>Ingen konto å opprette og ingen personopplysninger å fylle ut.</p>
+          </article>
+          <article>
+            <CircleDollarSign size={24} />
+            <span>02</span>
+            <h3>Ikke noe abonnement</h3>
+            <p>SeaNav er helt gratis å bruke, uten prøveperiode eller binding.</p>
+          </article>
+          <article>
+            <Compass size={24} />
+            <span>03</span>
+            <h3>Bare navigering</h3>
+            <p>Sjøkart, posisjon, fart og kurs samlet i en ryddig visning.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="landing-closing">
+        <div>
+          <p>Klar når du er.</p>
+          <h2>Åpne kartet. Finn kursen.</h2>
+        </div>
+        <button className="landing-primary-cta light" type="button" onClick={onStart}>
+          Kom i gang gratis
+          <ArrowRight size={19} />
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function NavigationApp() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -2625,6 +2719,37 @@ function App() {
         </section>
       )}
     </main>
+  );
+}
+
+function App() {
+  const [showNavigation, setShowNavigation] = useState(
+    () => typeof window !== "undefined" && window.location.hash === "#navigasjon",
+  );
+
+  useEffect(() => {
+    const syncViewWithHash = () => {
+      setShowNavigation(window.location.hash === "#navigasjon");
+    };
+
+    window.addEventListener("hashchange", syncViewWithHash);
+    return () => window.removeEventListener("hashchange", syncViewWithHash);
+  }, []);
+
+  useEffect(() => {
+    document.title = showNavigation
+      ? "SeaNav | Navigasjon"
+      : "SeaNav | Enkel navigering og sjøkart";
+  }, [showNavigation]);
+
+  const startNavigation = () => {
+    window.location.hash = "navigasjon";
+  };
+
+  return showNavigation ? (
+    <NavigationApp />
+  ) : (
+    <LandingPage onStart={startNavigation} />
   );
 }
 

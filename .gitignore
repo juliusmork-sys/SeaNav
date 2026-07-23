@@ -7,4 +7,7 @@ dist
 .DS_Store
 npm-debug.log*
 .env*
-!.env.example
+.vercel/
+AGENTS.md
+PRD.md
+public/SeaNav logo.png

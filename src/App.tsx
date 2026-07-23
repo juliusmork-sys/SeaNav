@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { Map } from "maplibre-gl";
 import {
-  Anchor,
   ArrowRight,
   BookOpen,
   CircleDollarSign,
@@ -100,6 +99,7 @@ type CameraPadding = {
 const DEFAULT_VIPPS_PAYMENT_URL = "https://qr.vipps.no/vp/nCQjy9dcM";
 const VIPPS_QR_IMAGE_URL = "/vipps-qr.png";
 const HERO_IMAGE_URL = "/seanav-hero.png";
+const LOGO_IMAGE_URL = "/app-icon-512.png";
 
 const UI_TEXT = {
   no: {
@@ -1070,7 +1070,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
         <header className="landing-header">
           <a className="landing-brand" href="#" aria-label="SeaNav forside">
             <span className="landing-brand-mark">
-              <Anchor size={21} strokeWidth={2.4} />
+              <img src={LOGO_IMAGE_URL} alt="" />
             </span>
             <span>SeaNav</span>
           </a>
@@ -2319,8 +2319,8 @@ function NavigationApp() {
       )}
 
       <section className="topbar" aria-label={text.navigationStatus}>
-        <div className="brand">
-          <Anchor size={22} strokeWidth={2.4} />
+        <div className="brand" aria-label="SeaNav">
+          <img className="brand-logo" src={LOGO_IMAGE_URL} alt="" />
           <div>
             <strong>SeaNav</strong>
             <span>{text.brandSubtitle}</span>

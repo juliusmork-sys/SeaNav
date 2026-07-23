@@ -1,138 +1,66 @@
 # SeaNav
 
-SeaNav er en nettbasert navigasjonsapp for fritidsfartøy i Norge. Appen kombinerer live GPS-posisjon, roterbart kart, sjøkartlag, antatt dybde, badeplassmarkører og en kompakt instrumentvisning som fungerer både på mobil og desktop.
+SeaNav er en nettbasert navigasjonsapp for fritidsbåter i Norge. Den gir sjøkart, GPS-posisjon, fart, kurs, antatt dybde og avstand til land i en kompakt visning som er tilpasset mobil, nettbrett og desktop.
 
-Appen er laget som en maritim situasjonsforståelse for nettleser, ikke som et sertifisert navigasjonsinstrument.
+SeaNav er kun for situasjonsforståelse og er ikke et godkjent navigasjonsinstrument.
 
 ## Funksjoner
 
-- Fullskjerm kart basert på MapLibre GL.
-- Automatisk GPS-sporing med posisjon, GPS-presisjon, hastighet og kurs.
-- Kart kan følge egen posisjon og rotere etter kurs, eller låses til nord opp.
-- Instrumentpanel tilpasset skjermretning:
-  - portrett: fast panel nederst
-  - landskap på mobil: fast panel til venstre
-  - desktop: kompakt panel på kartet
-- Hastighet kan veksles mellom knop og km/t.
-- Presise koordinater kan vises/skjules.
-- Kartlag:
-  - standard kart
-  - satellitt
-  - Kartverket sjøkart
-  - badeplasser
-- Antatt dybde basert på Kartverket dybdedata, med EMODnet som fallback.
-- Badeplassmarkører fra Miljødirektoratet.
-- Varsler for nærliggende badeplass og grunt område.
-- Varsellyd kan skrus av/på.
-- Norsk er primærspråk, med engelsk språkvalg i innstillinger.
-
-## Datakilder
-
-- **OpenFreeMap** brukes som standard basiskart.
-- **Esri World Imagery** brukes som satellittlag.
-- **Kartverket Sjøkart WMTS** brukes som sjøkartlag.
-- **Kartverket Sjøkart dybdedata WFS** brukes for antatt dybde.
-- **EMODnet Bathymetry** brukes som reservekilde for dybde dersom Kartverket ikke gir treff.
-- **Miljødirektoratet Badeplasser** brukes for registrerte badeplasser og nærliggende badeplassvarsel.
+- Landingsside og navigasjonsapp uten innlogging eller abonnement.
+- GPS-sporing med posisjon, presisjon, fart og kurs.
+- Nord opp, følg egen posisjon og roterende kart.
+- Standardkart, satellitt, Kartverkets sjøkart og badeplasslag.
+- Antatt dybde og avstand til land basert på Kartverket-data.
+- Varsler for grunt farvann og nærliggende badeplasser.
+- Sikkerhetsinnstillinger, sjømerkeoversikt og norsk/engelsk språkvalg.
+- Vipps-støtte med betalingslenke og QR-kode.
+- PWA-metadata og startskjermikoner for Android og iOS. En snarvei åpner navigasjonen direkte.
 
 ## Teknologi
 
-- React
-- TypeScript
-- Vite
-- MapLibre GL JS
-- Lucide React
-- Vercel serverless functions for API-ruter
+React, TypeScript, Vite, MapLibre GL JS, Lucide og Vercel serverless functions.
 
-## API-ruter
+## Datakilder
 
-Appen har to serverless API-ruter:
-
-- `api/depth.ts`
-  - Tar `lat` og `lon`.
-  - Henter nærliggende dybdepunkter fra Kartverket WFS.
-  - Returnerer estimert dybde, kilde, konfidens og avstand til nærmeste dybdepunkt.
-
-- `api/beaches.ts`
-  - Tar `lat`, `lon` og valgfri `radius`.
-  - Henter registrerte badeplasser fra Miljødirektoratets ArcGIS-tjeneste.
-  - Returnerer GeoJSON for visning på kart og nærmeste badeplass.
-
-Ved vanlig `npm run dev` i Vite kjører ikke Vercel API-rutene. Bruk `vercel dev` hvis dybde- og badeplass-API skal testes lokalt.
+- OpenFreeMap og Esri World Imagery for basiskart.
+- Kartverket for sjøkart, dybdepunkter og kystkontur.
+- Miljødirektoratet for badeplasser.
 
 ## Lokal utvikling
 
-Installer avhengigheter:
-
 ```bash
 npm install
-```
-
-Start Vite-devserver:
-
-```bash
 npm run dev
 ```
 
-Start med Vercel API-ruter lokalt:
+Vite kjører frontenden. For å teste API-rutene lokalt med Vercel:
 
 ```bash
-vercel dev
+npx vercel dev
 ```
 
-Bygg produksjonsversjon:
+Produksjonsbuild:
 
 ```bash
 npm run build
 ```
 
-Forhåndsvis produksjonsbuild:
+## API-ruter
 
-```bash
-npm run preview
-```
-
-## Vipps-betaling
-
-Vipps-knappen i innstillinger leser betalingslenken fra:
-
-```bash
-VITE_VIPPS_PAYMENT_URL="https://qr.vipps.no/vp/nCQjy9dcM"
-```
-
-Legg verdien i `.env.local` lokalt og som environment variable i Vercel.
-
-Anbefalt oppsett:
-
-1. Bruk en vanlig Vipps-betalingslenke eller Vipps ePayment-oppsett for Getz Tech AS.
-2. Kopier betalingslenken fra Vipps-portalen.
-3. Sett lenken som `VITE_VIPPS_PAYMENT_URL`.
-4. Deploy på nytt.
-
-Unngå Vipps Donasjoner for denne flyten, siden betalingen går til et kommersielt selskap.
+- `/api/depth` estimerer dybde fra Kartverkets dybdepunkter.
+- `/api/shoreline` beregner avstand til nærmeste kystkontur.
+- `/api/beaches` henter badeplasser og nærmeste badeplass.
 
 ## Deploy
 
-Prosjektet er konfigurert for Vercel:
+Prosjektet er konfigurert for Vercel. Deploy til produksjon med:
 
-```json
-{
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite"
-}
+```bash
+npx vercel --prod --yes
 ```
 
-Ved deploy bygger Vercel frontend til `dist` og publiserer API-rutene under `/api`.
+## Begrensninger
 
-## Viktige begrensninger
-
-- SeaNav er ikke godkjent for navigasjon og skal ikke erstatte offisielle sjøkart, utkikk, ekkolodd eller annet påkrevd navigasjonsutstyr.
-- GPS-presisjon avhenger av enhet, nettleser, tillatelser og om brukeren har valgt presis lokasjon.
-- Dybdeverdien er et estimat basert på kartdata og interpolering, ikke en live måling.
-- Desktop-maskiner har ofte dårlig eller indirekte posisjonering via Wi-Fi/IP, og mangler gjerne reell kurs/hastighet.
-- Badeplassdata avhenger av hva som er registrert i Miljødirektoratets datakilde.
-
-## Status
-
-SeaNav er under aktiv utvikling. Nåværende versjon fokuserer på mobil bruk til sjøs, lesbar dagmodus og norske datakilder.
+- SeaNav skal ikke erstatte offisielle sjøkart, utkikk, ekkolodd eller annet påkrevd navigasjonsutstyr.
+- GPS-presisjon avhenger av enhet, nettleser, tillatelser og valgt nøyaktighet.
+- Dybde og avstand til land er kartbaserte estimater, ikke målinger i sanntid.

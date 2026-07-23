@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { Map } from "maplibre-gl";
 import {
   ArrowRight,
+  Anchor,
   BookOpen,
   CircleDollarSign,
+  CloudSun,
   Compass,
   Crosshair,
+  ExternalLink,
   HeartHandshake,
   Layers,
   LocateFixed,
@@ -14,6 +17,7 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   UserRoundX,
+  Wind,
   X,
   Waves,
 } from "lucide-react";
@@ -65,11 +69,40 @@ type BeachState = {
   markerFeatureCollection: BeachFeatureCollection;
 };
 
+type WeatherState = {
+  status: "idle" | "loading" | "ready" | "error";
+  windSpeed: number | null;
+  windDirection: number | null;
+  waveHeight: number | null;
+  waveDirection: number | null;
+  currentSpeed: number | null;
+  currentDirection: number | null;
+};
+
+type Harbor = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  type: string | null;
+  website: string | null;
+  phone: string | null;
+  openingHours: string | null;
+  capacity: string | null;
+  amenities: string[];
+};
+
+type HarborState = {
+  status: "idle" | "loading" | "ready" | "error";
+  featureCollection: GeoJSON.FeatureCollection<GeoJSON.Point, Harbor>;
+};
+
 type Language = "no" | "en";
 type SpeedUnit = "kn" | "kmh";
 type DepthUnit = "m" | "ft";
 type DistanceUnit = "metric" | "nm";
 type HeadingMode = "full" | "degrees";
+type BaseMap = "map" | "satellite" | "off";
 type BeachDisplayMode = "off" | "icons" | "areas";
 type GpsIssueCode =
   | "insecure"
@@ -273,6 +306,8 @@ const UI_TEXT = {
     dismissAlert: "Lukk varsel",
     showStandardMap: "Vis standard kart",
     showSatelliteImagery: "Vis satellittbilde",
+    hideBaseMap: "Skjul basiskart",
+    cycleBaseMap: "Bytt mellom kart, satellitt og av",
     toggleNauticalChart: "Slå sjøkart av/på",
     toggleBeachAreas: "Bytt visning for badeplasser",
     togglePrecisePosition: "Vis/skjul presise koordinater",
@@ -280,6 +315,20 @@ const UI_TEXT = {
     satellite: "Satellitt",
     chart: "Sjøkart",
     beaches: "Bading",
+    harbors: "Havner",
+    weather: "Vær",
+    weatherHere: "Vær her",
+    weatherWaiting: "Venter på GPS-posisjon",
+    weatherUnavailable: "Værdata er ikke tilgjengelig akkurat nå.",
+    wind: "Vind",
+    waves: "Bølger",
+    current: "Strøm",
+    harborCapacity: "Kapasitet",
+    harborHours: "Åpningstider",
+    harborPhone: "Telefon",
+    harborWebsite: "Nettside",
+    openGoogleMaps: "Åpne i Google Maps",
+    closeMap: "Lukk kart",
     coordinates: "Koordinater",
     precisePosition: "Presis posisjon",
     beachSpeedWarning: (name: string, distance: number) =>
@@ -462,6 +511,8 @@ const UI_TEXT = {
     dismissAlert: "Dismiss alert",
     showStandardMap: "Show standard map",
     showSatelliteImagery: "Show satellite imagery",
+    hideBaseMap: "Hide base map",
+    cycleBaseMap: "Switch between map, satellite and off",
     toggleNauticalChart: "Toggle nautical chart",
     toggleBeachAreas: "Change bathing area display",
     togglePrecisePosition: "Show/hide precise coordinates",
@@ -469,6 +520,20 @@ const UI_TEXT = {
     satellite: "Satellite",
     chart: "Chart",
     beaches: "Bathing",
+    harbors: "Harbours",
+    weather: "Weather",
+    weatherHere: "Weather here",
+    weatherWaiting: "Waiting for GPS position",
+    weatherUnavailable: "Weather data is unavailable right now.",
+    wind: "Wind",
+    waves: "Waves",
+    current: "Current",
+    harborCapacity: "Capacity",
+    harborHours: "Opening hours",
+    harborPhone: "Phone",
+    harborWebsite: "Website",
+    openGoogleMaps: "Open in Google Maps",
+    closeMap: "Close map",
     coordinates: "Coordinates",
     precisePosition: "Precise position",
     beachSpeedWarning: (name: string, distance: number) =>
@@ -506,6 +571,23 @@ const DEFAULT_BEACH_STATE: BeachState = {
   nearest: null,
   featureCollection: EMPTY_FEATURE_COLLECTION,
   markerFeatureCollection: EMPTY_FEATURE_COLLECTION,
+};
+const DEFAULT_WEATHER_STATE: WeatherState = {
+  status: "idle",
+  windSpeed: null,
+  windDirection: null,
+  waveHeight: null,
+  waveDirection: null,
+  currentSpeed: null,
+  currentDirection: null,
+};
+const EMPTY_HARBOR_FEATURE_COLLECTION: HarborState["featureCollection"] = {
+  type: "FeatureCollection",
+  features: [],
+};
+const DEFAULT_HARBOR_STATE: HarborState = {
+  status: "idle",
+  featureCollection: EMPTY_HARBOR_FEATURE_COLLECTION,
 };
 const OWNSHIP_MARKER_SVG = `
   <div class="ownship-pulse"></div>
@@ -674,6 +756,17 @@ function formatHeading(
   return `${degrees}° ${compassPoint(heading)}`;
 }
 
+function formatWeatherMeasure(
+  value: number | null,
+  unit: string,
+  direction: number | null,
+) {
+  if (value === null || Number.isNaN(value)) return "--";
+  const valueLabel = `${value.toFixed(1)} ${unit}`;
+  if (direction === null || Number.isNaN(direction)) return valueLabel;
+  return `${valueLabel} · ${Math.round(normalizeBearing(direction))}° ${compassPoint(direction)}`;
+}
+
 function getVisibleMapPadding(): CameraPadding {
   if (typeof window === "undefined") {
     return { top: 0, right: 0, bottom: 0, left: 0 };
@@ -811,6 +904,40 @@ function createBeachAreaPatternImageData() {
   return context.getImageData(0, 0, size, size);
 }
 
+function createHarborIconImageData() {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.clearRect(0, 0, size, size);
+  context.fillStyle = "rgba(255, 255, 255, 0.96)";
+  context.strokeStyle = "rgba(31, 41, 55, 0.24)";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(32, 32, 25, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  context.strokeStyle = "#007590";
+  context.lineWidth = 4;
+  context.lineCap = "round";
+  context.beginPath();
+  context.arc(32, 37, 12, Math.PI * 0.12, Math.PI * 0.88);
+  context.moveTo(32, 16);
+  context.lineTo(32, 39);
+  context.moveTo(24, 24);
+  context.lineTo(40, 24);
+  context.moveTo(27, 18);
+  context.lineTo(32, 13);
+  context.lineTo(37, 18);
+  context.stroke();
+
+  return context.getImageData(0, 0, size, size);
+}
+
 function getBeachFeatureName(
   properties: maplibregl.MapGeoJSONFeature["properties"],
 ) {
@@ -818,6 +945,40 @@ function getBeachFeatureName(
   return typeof rawName === "string" && rawName.trim()
     ? rawName.trim()
     : "Badeplass";
+}
+
+function getHarborFromProperties(
+  properties: maplibregl.MapGeoJSONFeature["properties"],
+) {
+  const record = properties ?? {};
+  const latitude = typeof record.latitude === "number" ? record.latitude : null;
+  const longitude = typeof record.longitude === "number" ? record.longitude : null;
+  if (
+    typeof record.id !== "string" ||
+    typeof record.name !== "string" ||
+    latitude === null ||
+    longitude === null
+  ) {
+    return null;
+  }
+
+  const amenities = Array.isArray(record.amenities)
+    ? record.amenities.filter((value): value is string => typeof value === "string")
+    : typeof record.amenities === "string"
+      ? record.amenities.split(",").filter(Boolean)
+      : [];
+  return {
+    id: record.id,
+    name: record.name,
+    latitude,
+    longitude,
+    type: typeof record.type === "string" ? record.type : null,
+    website: typeof record.website === "string" ? record.website : null,
+    phone: typeof record.phone === "string" ? record.phone : null,
+    openingHours: typeof record.openingHours === "string" ? record.openingHours : null,
+    capacity: typeof record.capacity === "string" ? record.capacity : null,
+    amenities,
+  } satisfies Harbor;
 }
 
 function escapePopupText(value: string) {
@@ -1056,6 +1217,48 @@ async function fetchDistanceToLand(latitude: number, longitude: number) {
   return payload.distanceMeters;
 }
 
+async function fetchWeather(latitude: number, longitude: number) {
+  const response = await fetch(
+    `/api/weather?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`,
+  );
+
+  if (!response.ok) {
+    throw new Error("Weather service unavailable");
+  }
+
+  const payload = (await response.json()) as Partial<Omit<WeatherState, "status">>;
+  const valueOrNull = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+
+  return {
+    status: "ready",
+    windSpeed: valueOrNull(payload.windSpeed),
+    windDirection: valueOrNull(payload.windDirection),
+    waveHeight: valueOrNull(payload.waveHeight),
+    waveDirection: valueOrNull(payload.waveDirection),
+    currentSpeed: valueOrNull(payload.currentSpeed),
+    currentDirection: valueOrNull(payload.currentDirection),
+  } satisfies WeatherState;
+}
+
+async function fetchNearbyHarbors(
+  latitude: number,
+  longitude: number,
+  radiusMeters = 2000,
+) {
+  const response = await fetch(
+    `/api/harbors?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&radius=${encodeURIComponent(radiusMeters)}`,
+  );
+  if (!response.ok) {
+    throw new Error("Harbor service unavailable");
+  }
+
+  const payload = (await response.json()) as {
+    featureCollection?: HarborState["featureCollection"];
+  };
+  return payload.featureCollection ?? EMPTY_HARBOR_FEATURE_COLLECTION;
+}
+
 function LandingPage({ onStart }: { onStart: () => void }) {
   return (
     <main className="landing-page">
@@ -1148,6 +1351,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 function NavigationApp() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
+  const baseStyleLayerIdsRef = useRef<string[]>([]);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const lastFixRef = useRef<PositionFix | null>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -1156,6 +1360,8 @@ function NavigationApp() {
   const shorelineAbortRef = useRef<number | null>(null);
   const beachPositionAbortRef = useRef<number | null>(null);
   const beachMapAbortRef = useRef<number | null>(null);
+  const harborMapAbortRef = useRef<number | null>(null);
+  const weatherAbortRef = useRef<number | null>(null);
   const gpsRestartLabelTimeoutRef = useRef<number | null>(null);
   const beachPositionQueryRef = useRef<{
     latitude: number;
@@ -1169,6 +1375,17 @@ function NavigationApp() {
     radiusMeters: number;
     timestamp: number;
   } | null>(null);
+  const harborMapQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    timestamp: number;
+  } | null>(null);
+  const weatherQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  } | null>(null);
   const lastPlayedAlertKeyRef = useRef<string | null>(null);
   const orientationHeadingRef = useRef<number | null>(null);
   const [fix, setFix] = useState<PositionFix | null>(null);
@@ -1180,6 +1397,8 @@ function NavigationApp() {
     DEFAULT_SHORELINE_STATE,
   );
   const [beaches, setBeaches] = useState<BeachState>(DEFAULT_BEACH_STATE);
+  const [harbors, setHarbors] = useState<HarborState>(DEFAULT_HARBOR_STATE);
+  const [weather, setWeather] = useState<WeatherState>(DEFAULT_WEATHER_STATE);
   const [language, setLanguage] = useState<Language>(() => {
     if (typeof window === "undefined") return "no";
     return window.localStorage.getItem("seanav-language") === "en"
@@ -1192,11 +1411,14 @@ function NavigationApp() {
   const [northUp, setNorthUp] = useState(false);
   const [mapBearing, setMapBearing] = useState(0);
   const [chartVisible, setChartVisible] = useState(true);
+  const [harborsVisible, setHarborsVisible] = useState(false);
   const [beachDisplayMode, setBeachDisplayMode] =
     useState<BeachDisplayMode>("icons");
-  const [baseMap, setBaseMap] = useState<"map" | "satellite">("map");
+  const [baseMap, setBaseMap] = useState<BaseMap>("map");
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(false);
+  const [harborMapOpen, setHarborMapOpen] = useState<Harbor | null>(null);
   const [seaMarksOpen, setSeaMarksOpen] = useState(false);
   const [gpsHelpOpen, setGpsHelpOpen] = useState(false);
   const [gpsIssue, setGpsIssue] = useState<GpsIssue | null>(null);
@@ -1244,6 +1466,12 @@ function NavigationApp() {
       : beachDisplayMode === "icons"
         ? text.beachLayerIcons
         : text.beachLayerAreas;
+  const baseMapLabel =
+    baseMap === "map"
+      ? text.map
+      : baseMap === "satellite"
+        ? text.satellite
+        : text.beachLayerOff;
   const visibleGpsIssue =
     gpsIssue && gpsIssue.code !== dismissedGpsIssueCode ? gpsIssue : null;
   const gpsStatusTone =
@@ -1489,6 +1717,63 @@ function NavigationApp() {
     [beachesVisible],
   );
 
+  const refreshHarbors = useCallback(
+    (latitude: number, longitude: number, radiusMeters = 2000) => {
+      const lastQuery = harborMapQueryRef.current;
+      if (
+        lastQuery &&
+        Date.now() - lastQuery.timestamp < 300000 &&
+        radiusMeters <= lastQuery.radiusMeters &&
+        distanceBetweenCoordinates(
+          latitude,
+          longitude,
+          lastQuery.latitude,
+          lastQuery.longitude,
+        ) < 350
+      ) {
+        return;
+      }
+
+      if (harborMapAbortRef.current !== null) {
+        window.clearTimeout(harborMapAbortRef.current);
+      }
+
+      const requestedAt = Date.now();
+      harborMapQueryRef.current = {
+        latitude,
+        longitude,
+        radiusMeters,
+        timestamp: requestedAt,
+      };
+      setHarbors((current) => ({ ...current, status: "loading" }));
+
+      harborMapAbortRef.current = window.setTimeout(() => {
+        fetchNearbyHarbors(latitude, longitude, radiusMeters)
+          .then((featureCollection) => {
+            if (harborMapQueryRef.current?.timestamp !== requestedAt) return;
+            setHarbors({ status: "ready", featureCollection });
+          })
+          .catch(() => {
+            if (harborMapQueryRef.current?.timestamp !== requestedAt) return;
+            setHarbors((current) => ({ ...current, status: "error" }));
+          });
+      }, 500);
+    },
+    [],
+  );
+
+  const toggleHarbors = useCallback(() => {
+    setHarborsVisible((current) => {
+      const next = !current;
+      const map = mapRef.current;
+      if (next && map) {
+        const center = map.getCenter();
+        refreshHarbors(center.lat, center.lng, getBeachSearchRadius(map));
+      }
+      return next;
+    });
+  }, [refreshHarbors]);
+
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
@@ -1510,6 +1795,9 @@ function NavigationApp() {
     map.on("move", syncMapBearing);
 
     map.on("load", () => {
+      baseStyleLayerIdsRef.current = (map.getStyle().layers ?? []).map(
+        (layer) => layer.id,
+      );
       const beachIcon = createBeachIconImageData();
       if (beachIcon && !map.hasImage("beach-icon")) {
         map.addImage("beach-icon", beachIcon, { pixelRatio: 2 });
@@ -1517,6 +1805,10 @@ function NavigationApp() {
       const beachAreaPattern = createBeachAreaPatternImageData();
       if (beachAreaPattern && !map.hasImage("beach-area-pattern")) {
         map.addImage("beach-area-pattern", beachAreaPattern, { pixelRatio: 2 });
+      }
+      const harborIcon = createHarborIconImageData();
+      if (harborIcon && !map.hasImage("harbor-icon")) {
+        map.addImage("harbor-icon", harborIcon, { pixelRatio: 2 });
       }
 
       map.addSource("satellite", {
@@ -1546,6 +1838,11 @@ function NavigationApp() {
         paint: {
           "raster-opacity": 0.68,
         },
+      });
+      map.addSource("harbors", {
+        type: "geojson",
+        data: EMPTY_HARBOR_FEATURE_COLLECTION,
+        attribution: "Harbours: OpenStreetMap contributors",
       });
       map.addSource("beaches", {
         type: "geojson",
@@ -1662,6 +1959,32 @@ function NavigationApp() {
           "text-halo-width": 1.6,
         },
       });
+      map.addLayer({
+        id: "harbor-marker-halo",
+        type: "circle",
+        source: "harbors",
+        layout: { visibility: "none" },
+        paint: {
+          "circle-color": "#ffffff",
+          "circle-opacity": 0.96,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 14, 11],
+          "circle-stroke-color": "rgba(31, 41, 55, 0.28)",
+          "circle-stroke-width": 1,
+        },
+      });
+      map.addLayer({
+        id: "harbor-marker",
+        type: "symbol",
+        source: "harbors",
+        layout: {
+          visibility: "none",
+          "icon-image": "harbor-icon",
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 0.68],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-anchor": "center",
+        },
+      });
       const beachPopupLayers = [
         "beach-marker-halo",
         "beach-marker",
@@ -1697,6 +2020,58 @@ function NavigationApp() {
         map.on("mouseenter", layerId, showPointer);
         map.on("mouseleave", layerId, hidePointer);
       });
+      const showHarborPopup = (event: maplibregl.MapLayerMouseEvent) => {
+        const harbor = getHarborFromProperties(event.features?.[0]?.properties);
+        if (!harbor) return;
+
+        const content = document.createElement("div");
+        content.className = "harbor-popup-content";
+        const title = document.createElement("strong");
+        title.textContent = harbor.name;
+        content.appendChild(title);
+        if (harbor.type) {
+          const type = document.createElement("span");
+          type.textContent = harbor.type;
+          content.appendChild(type);
+        }
+        const metadata = [
+          harbor.capacity ? `${text.harborCapacity}: ${harbor.capacity}` : null,
+          harbor.openingHours ? `${text.harborHours}: ${harbor.openingHours}` : null,
+          harbor.phone ? `${text.harborPhone}: ${harbor.phone}` : null,
+          harbor.amenities.length > 0 ? harbor.amenities.join(" · ") : null,
+        ].filter((value): value is string => Boolean(value));
+        if (metadata.length > 0) {
+          const details = document.createElement("small");
+          details.textContent = metadata.join("\n");
+          content.appendChild(details);
+        }
+        if (harbor.website) {
+          const website = document.createElement("a");
+          website.href = harbor.website;
+          website.target = "_blank";
+          website.rel = "noreferrer";
+          website.textContent = text.harborWebsite;
+          content.appendChild(website);
+        }
+        const mapsButton = document.createElement("button");
+        mapsButton.type = "button";
+        mapsButton.textContent = text.openGoogleMaps;
+        mapsButton.addEventListener("click", () => setHarborMapOpen(harbor));
+        content.appendChild(mapsButton);
+
+        new maplibregl.Popup({
+          closeButton: true,
+          closeOnClick: true,
+          offset: 14,
+          className: "harbor-popup",
+        })
+          .setLngLat(event.lngLat)
+          .setDOMContent(content)
+          .addTo(map);
+      };
+      map.on("click", "harbor-marker", showHarborPopup);
+      map.on("mouseenter", "harbor-marker", showPointer);
+      map.on("mouseleave", "harbor-marker", hidePointer);
       map.addSource("accuracy", {
         type: "geojson",
         data: createAccuracyCircle(OSLO_FJORD[0], OSLO_FJORD[1], 0),
@@ -1760,6 +2135,12 @@ function NavigationApp() {
       if (beachMapAbortRef.current !== null) {
         window.clearTimeout(beachMapAbortRef.current);
       }
+      if (harborMapAbortRef.current !== null) {
+        window.clearTimeout(harborMapAbortRef.current);
+      }
+      if (weatherAbortRef.current !== null) {
+        window.clearTimeout(weatherAbortRef.current);
+      }
       if (gpsRestartLabelTimeoutRef.current !== null) {
         window.clearTimeout(gpsRestartLabelTimeoutRef.current);
       }
@@ -1782,7 +2163,32 @@ function NavigationApp() {
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !map.getLayer("harbor-marker")) return;
+    const visibility = harborsVisible ? "visible" : "none";
+    map.setLayoutProperty("harbor-marker-halo", "visibility", visibility);
+    map.setLayoutProperty("harbor-marker", "visibility", visibility);
+  }, [harborsVisible]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getSource("harbors")) return;
+    const source = map.getSource("harbors") as maplibregl.GeoJSONSource;
+    source.setData(harbors.featureCollection);
+  }, [harbors.featureCollection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !map.getLayer("satellite")) return;
+    const showStandardMap = baseMap === "map";
+    baseStyleLayerIdsRef.current.forEach((layerId) => {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(
+          layerId,
+          "visibility",
+          showStandardMap ? "visible" : "none",
+        );
+      }
+    });
     map.setLayoutProperty(
       "satellite",
       "visibility",
@@ -1965,6 +2371,48 @@ function NavigationApp() {
   }, [fix, refreshBeaches]);
 
   useEffect(() => {
+    if (!fix) return;
+
+    const lastQuery = weatherQueryRef.current;
+    if (
+      lastQuery &&
+      Date.now() - lastQuery.timestamp < 600000 &&
+      distanceBetweenCoordinates(
+        fix.latitude,
+        fix.longitude,
+        lastQuery.latitude,
+        lastQuery.longitude,
+      ) < 500
+    ) {
+      return;
+    }
+
+    if (weatherAbortRef.current !== null) {
+      window.clearTimeout(weatherAbortRef.current);
+    }
+
+    const requestedAt = Date.now();
+    weatherQueryRef.current = {
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      timestamp: requestedAt,
+    };
+    setWeather((current) => ({ ...current, status: "loading" }));
+
+    weatherAbortRef.current = window.setTimeout(() => {
+      fetchWeather(fix.latitude, fix.longitude)
+        .then((result) => {
+          if (weatherQueryRef.current?.timestamp !== requestedAt) return;
+          setWeather(result);
+        })
+        .catch(() => {
+          if (weatherQueryRef.current?.timestamp !== requestedAt) return;
+          setWeather((current) => ({ ...current, status: "error" }));
+        });
+    }, 850);
+  }, [fix]);
+
+  useEffect(() => {
     if (!beachesVisible) return;
     const map = mapRef.current;
     if (!map) return;
@@ -1987,6 +2435,30 @@ function NavigationApp() {
       map.off("zoomend", refreshFromMapCenter);
     };
   }, [beachesVisible, refreshBeaches]);
+
+  useEffect(() => {
+    if (!harborsVisible) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    const refreshFromMapCenter = () => {
+      const center = map.getCenter();
+      refreshHarbors(center.lat, center.lng, getBeachSearchRadius(map));
+    };
+
+    if (map.loaded()) {
+      refreshFromMapCenter();
+    } else {
+      map.once("load", refreshFromMapCenter);
+    }
+
+    map.on("moveend", refreshFromMapCenter);
+    map.on("zoomend", refreshFromMapCenter);
+    return () => {
+      map.off("moveend", refreshFromMapCenter);
+      map.off("zoomend", refreshFromMapCenter);
+    };
+  }, [harborsVisible, refreshHarbors]);
 
   useEffect(() => {
     const handleOrientation = (event: DeviceOrientationEvent) => {
@@ -2303,7 +2775,7 @@ function NavigationApp() {
   };
 
   return (
-    <main className="app-shell">
+    <main className={weatherOpen ? "app-shell weather-open" : "app-shell"}>
       <div ref={mapContainer} className="map" aria-label={text.navigationMap} />
 
       {showPrecisePosition && (
@@ -2327,6 +2799,38 @@ function NavigationApp() {
           </div>
         </div>
       </section>
+
+      {weatherOpen && !controlsOpen && (
+        <section className="weather-card map-weather-card" aria-label={text.weatherHere}>
+          <div className="weather-card-heading">
+            <CloudSun size={18} />
+            <strong>{text.weatherHere}</strong>
+          </div>
+          {!fix ? (
+            <p className="weather-card-message">{text.weatherWaiting}</p>
+          ) : weather.status === "error" ? (
+            <p className="weather-card-message">{text.weatherUnavailable}</p>
+          ) : (
+            <div className="weather-card-metrics" aria-busy={weather.status === "loading"}>
+              <div className="weather-card-metric">
+                <Wind size={18} />
+                <span>{text.wind}</span>
+                <strong>{formatWeatherMeasure(weather.windSpeed, "m/s", weather.windDirection)}</strong>
+              </div>
+              <div className="weather-card-metric">
+                <Waves size={18} />
+                <span>{text.waves}</span>
+                <strong>{formatWeatherMeasure(weather.waveHeight, "m", weather.waveDirection)}</strong>
+              </div>
+              <div className="weather-card-metric">
+                <Waves size={18} />
+                <span>{text.current}</span>
+                <strong>{formatWeatherMeasure(weather.currentSpeed, "m/s", weather.currentDirection)}</strong>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {visibleGpsIssue && (
         <div className="gps-alert" role="alert">
@@ -2583,21 +3087,26 @@ function NavigationApp() {
             <div className="panel-drawer embedded-controls">
               <button
                 type="button"
-                className={baseMap === "map" ? "active" : ""}
-                onClick={() => setBaseMap("map")}
-                title={text.showStandardMap}
+                className={baseMap === "off" ? "" : "active"}
+                onClick={() =>
+                  setBaseMap((current) =>
+                    current === "map"
+                      ? "satellite"
+                      : current === "satellite"
+                        ? "off"
+                        : "map",
+                  )
+                }
+                title={text.cycleBaseMap}
               >
-                <MapIcon size={20} />
-                <span>{text.map}</span>
-              </button>
-              <button
-                type="button"
-                className={baseMap === "satellite" ? "active" : ""}
-                onClick={() => setBaseMap("satellite")}
-                title={text.showSatelliteImagery}
-              >
-                <Satellite size={20} />
-                <span>{text.satellite}</span>
+                {baseMap === "map" ? (
+                  <MapIcon size={20} />
+                ) : baseMap === "satellite" ? (
+                  <Satellite size={20} />
+                ) : (
+                  <MapIcon size={20} />
+                )}
+                <span>{baseMapLabel}</span>
               </button>
               <button
                 type="button"
@@ -2622,6 +3131,24 @@ function NavigationApp() {
                 <Waves size={20} />
                 <span>{beachLayerLabel}</span>
               </button>
+              <button
+                type="button"
+                className={harborsVisible ? "active" : ""}
+                onClick={toggleHarbors}
+                title={text.harbors}
+              >
+                <Anchor size={20} />
+                <span>{text.harbors}</span>
+              </button>
+              <button
+                type="button"
+                className={weatherOpen ? "active" : ""}
+                onClick={() => setWeatherOpen((value) => !value)}
+                title={text.weatherHere}
+              >
+                <CloudSun size={20} />
+                <span>{text.weather}</span>
+              </button>
             </div>
           )}
 
@@ -2636,6 +3163,37 @@ function NavigationApp() {
             </div>
           )}
         </section>
+
+      {harborMapOpen && (
+        <section className="harbor-map-modal" role="dialog" aria-modal="true" aria-label={harborMapOpen.name}>
+          <header>
+            <div>
+              <Anchor size={20} />
+              <strong>{harborMapOpen.name}</strong>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHarborMapOpen(null)}
+              title={text.closeMap}
+              aria-label={text.closeMap}
+            >
+              <X size={21} />
+            </button>
+          </header>
+          <iframe
+            title={`${harborMapOpen.name} i Google Maps`}
+            src={`https://www.google.com/maps?q=${encodeURIComponent(`${harborMapOpen.latitude},${harborMapOpen.longitude}`)}&z=15&output=embed`}
+          />
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${harborMapOpen.latitude},${harborMapOpen.longitude}`)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {text.openGoogleMaps}
+            <ExternalLink size={17} />
+          </a>
+        </section>
+      )}
 
       {seaMarksOpen && (
         <section className="sea-marks-modal" role="dialog" aria-modal="true" aria-labelledby="sea-marks-title">

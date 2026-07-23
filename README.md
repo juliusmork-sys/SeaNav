@@ -9,7 +9,8 @@ SeaNav er kun for situasjonsforståelse og er ikke et godkjent navigasjonsinstru
 - Landingsside og navigasjonsapp uten innlogging eller abonnement.
 - GPS-sporing med posisjon, presisjon, fart og kurs.
 - Nord opp, følg egen posisjon og roterende kart.
-- Standardkart, satellitt, Kartverkets sjøkart og badeplasslag.
+- Standardkart, satellitt, Kartverkets sjøkart, havnepunkter og badeplasslag.
+- Lokalt værkort med vind, bølger og strøm for GPS-posisjonen.
 - Antatt dybde og avstand til land basert på Kartverket-data.
 - Varsler for grunt farvann og nærliggende badeplasser.
 - Sikkerhetsinnstillinger, sjømerkeoversikt og norsk/engelsk språkvalg.
@@ -25,6 +26,8 @@ React, TypeScript, Vite, MapLibre GL JS, Lucide og Vercel serverless functions.
 - OpenFreeMap og Esri World Imagery for basiskart.
 - Kartverket for sjøkart, dybdepunkter og kystkontur.
 - Miljødirektoratet for badeplasser.
+- MET Norway for vær- og havdata.
+- OpenStreetMap for havnepunkter og registrerte fasiliteter.
 
 ## Lokal utvikling
 
@@ -50,6 +53,8 @@ npm run build
 - `/api/depth` estimerer dybde fra Kartverkets dybdepunkter.
 - `/api/shoreline` beregner avstand til nærmeste kystkontur.
 - `/api/beaches` henter badeplasser og nærmeste badeplass.
+- `/api/weather` henter vind, bølger og strøm fra MET Norway.
+- `/api/harbors` henter nærliggende havnepunkter fra OpenStreetMap.
 
 ## Deploy
 

@@ -3,8 +3,8 @@ import maplibregl, { Map } from "maplibre-gl";
 import {
   Anchor,
   BookOpen,
-  CreditCard,
   Crosshair,
+  HeartHandshake,
   Layers,
   LocateFixed,
   Map as MapIcon,
@@ -190,10 +190,11 @@ const UI_TEXT = {
     alertSound: "Varsellyd",
     seaMarks: "Sjømerker",
     openSeaMarks: "Åpne oversikt over sjømerker",
-    payment: "Betal med Vipps",
+    payment: "Støtt med Vipps",
     paymentUnavailable: "Vipps-lenke er ikke satt opp ennå.",
     paymentQrTitle: "Vipps QR-kode",
-    paymentQrDescription: "Skann med Vipps på mobilen.",
+    paymentQrDescription:
+      "SeaNav er helt gratis å bruke for alle. Vi blir derimot veldig glade for valgfritt bidrag for å støtte videre utvikling.",
     closeSeaMarks: "Lukk sjømerker",
     seaMarksTitle: "Sjømerker",
     seaMarksSubtitle: "Norge bruker IALA region A.",
@@ -378,10 +379,11 @@ const UI_TEXT = {
     alertSound: "Alert sound",
     seaMarks: "Sea marks",
     openSeaMarks: "Open sea mark overview",
-    payment: "Pay with Vipps",
+    payment: "Support with Vipps",
     paymentUnavailable: "Vipps payment link is not configured yet.",
     paymentQrTitle: "Vipps QR code",
-    paymentQrDescription: "Scan with Vipps on your phone.",
+    paymentQrDescription:
+      "SeaNav is free for everyone to use. Optional contributions to support further development are greatly appreciated.",
     closeSeaMarks: "Close sea marks",
     seaMarksTitle: "Sea marks",
     seaMarksSubtitle: "Norway uses IALA region A.",
@@ -1200,26 +1202,53 @@ function App() {
   }, [alertSoundEnabled]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return;
+    if (typeof window === "undefined") return;
 
     const updateMobileChromeOffset = () => {
       const viewport = window.visualViewport;
-      if (!viewport) return;
+      const userAgent = window.navigator.userAgent;
+      const platform = window.navigator.platform;
+      const maxTouchPoints = window.navigator.maxTouchPoints ?? 0;
+      const isIos =
+        /iPad|iPhone|iPod/.test(userAgent) ||
+        (platform === "MacIntel" && maxTouchPoints > 1);
+      const isAndroid = /Android/.test(userAgent);
+      const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+      const isCompactWidth = window.matchMedia("(max-width: 820px)").matches;
 
-      const coveredBottom = Math.max(
-        0,
-        window.innerHeight - viewport.height - viewport.offsetTop,
+      const measuredCoveredBottom = viewport
+        ? Math.max(
+            0,
+            window.innerHeight - viewport.height - viewport.offsetTop,
+          )
+        : 0;
+      const platformBottomClearance =
+        isPortrait && isCompactWidth
+          ? isIos
+            ? 34
+            : isAndroid
+              ? 28
+              : 18
+          : 0;
+      const panelBottomClearance = Math.max(
+        measuredCoveredBottom,
+        platformBottomClearance,
       );
 
       document.documentElement.style.setProperty(
         "--mobile-browser-bottom-offset",
-        `${Math.round(coveredBottom)}px`,
+        `${Math.round(measuredCoveredBottom)}px`,
+      );
+      document.documentElement.style.setProperty(
+        "--mobile-panel-bottom-clearance",
+        `${Math.round(panelBottomClearance)}px`,
       );
     };
 
     updateMobileChromeOffset();
-    window.visualViewport.addEventListener("resize", updateMobileChromeOffset);
-    window.visualViewport.addEventListener("scroll", updateMobileChromeOffset);
+    window.visualViewport?.addEventListener("resize", updateMobileChromeOffset);
+    window.visualViewport?.addEventListener("scroll", updateMobileChromeOffset);
+    window.addEventListener("resize", updateMobileChromeOffset);
     window.addEventListener("orientationchange", updateMobileChromeOffset);
 
     return () => {
@@ -1231,9 +1260,13 @@ function App() {
         "scroll",
         updateMobileChromeOffset,
       );
+      window.removeEventListener("resize", updateMobileChromeOffset);
       window.removeEventListener("orientationchange", updateMobileChromeOffset);
       document.documentElement.style.removeProperty(
         "--mobile-browser-bottom-offset",
+      );
+      document.documentElement.style.removeProperty(
+        "--mobile-panel-bottom-clearance",
       );
     };
   }, []);
@@ -2285,17 +2318,16 @@ function App() {
             </button>
             <Waves size={28} />
           </div>
-          <p className={depth.status === "error" ? "warning" : ""}>
-            {depth.message}
-          </p>
-
-          <div className="readout-grid">
+          <div className="readout-grid coordinate-readouts">
             {readouts.slice(0, 2).map((item) => (
               <div className="readout" key={item.label}>
                 <span>{item.label}</span>
                 <strong>{item.value}</strong>
               </div>
             ))}
+          </div>
+
+          <div className="readout-grid motion-readouts">
             <div className="readout instrument-pair motion-readout">
               <button
                 type="button"
@@ -2435,7 +2467,7 @@ function App() {
                   onClick={payWithVipps}
                   title={text.payment}
                 >
-                  <CreditCard size={18} />
+                  <HeartHandshake size={18} />
                   <span>{text.payment}</span>
                 </button>
               </div>

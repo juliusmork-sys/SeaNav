@@ -8,6 +8,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   --mobile-browser-bottom-offset: 0px;
+  --mobile-panel-bottom-clearance: 0px;
 }
 
 * {
@@ -303,9 +304,16 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   color: #d9eef4;
   font-size: 0.84rem;
   cursor: pointer;
+}
+
+.toggle-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
 }
 
 .toggle-row input {
@@ -470,6 +478,11 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.coordinate-readouts,
+.motion-readouts {
+  grid-column: 1 / -1;
 }
 
 .readout {
@@ -1612,16 +1625,17 @@ button {
       68px;
   }
 
-  .readout-grid {
+  .motion-readouts {
     display: block;
     min-width: 0;
   }
 
-  .readout-grid .readout {
+  .coordinate-readouts,
+  .motion-readouts .readout {
     display: none;
   }
 
-  .readout-grid .motion-readout {
+  .motion-readouts .motion-readout {
     display: grid;
     height: 100%;
   }
@@ -1756,15 +1770,16 @@ button {
     grid-template-columns: 82px minmax(96px, 1fr) 78px 72px;
   }
 
-  .readout-grid {
+  .motion-readouts {
     display: block;
   }
 
-  .readout-grid .readout {
+  .coordinate-readouts,
+  .motion-readouts .readout {
     display: none;
   }
 
-  .readout-grid .motion-readout {
+  .motion-readouts .motion-readout {
     display: grid;
     height: 100%;
   }
@@ -2779,11 +2794,14 @@ button {
 
   .readout-panel {
     right: 0;
-    bottom: var(--mobile-browser-bottom-offset);
+    bottom: 0;
     left: 0;
     display: grid;
     width: 100vw;
-    min-height: calc(122px + max(env(safe-area-inset-bottom), 18px));
+    min-height: calc(
+      122px + max(env(safe-area-inset-bottom), 18px) +
+        var(--mobile-panel-bottom-clearance)
+    );
     grid-template-areas:
       "actions motion depth gps"
       "actions motion depth locate";
@@ -2791,7 +2809,12 @@ button {
     grid-template-rows: 1fr 1fr;
     gap: 7px;
     align-items: stretch;
-    padding: 8px 10px calc(8px + max(env(safe-area-inset-bottom), 18px));
+    padding:
+      8px 10px
+      calc(
+        8px + max(env(safe-area-inset-bottom), 18px) +
+          var(--mobile-panel-bottom-clearance)
+      );
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
@@ -2870,12 +2893,13 @@ button {
     display: none;
   }
 
-  .readout-grid {
+  .motion-readouts {
     grid-area: motion;
     display: block;
   }
 
-  .readout-grid > .readout:not(.motion-readout) {
+  .coordinate-readouts,
+  .motion-readouts > .readout:not(.motion-readout) {
     display: none;
   }
 
@@ -3427,6 +3451,31 @@ button {
     gap: 8px;
   }
 
+  .coordinate-readouts {
+    order: 2;
+  }
+
+  .motion-readouts {
+    order: 3;
+  }
+
+  .accuracy,
+  .location-mode-button {
+    order: 4;
+  }
+
+  .panel-actions {
+    order: 5;
+  }
+
+  .panel-drawer {
+    order: 6;
+  }
+
+  .notice {
+    order: 7;
+  }
+
   .readout strong {
     margin-top: 7px;
     font-size: 1rem;
@@ -3609,18 +3658,23 @@ button {
   }
 
   .gps-alert {
-    top: calc(max(8px, env(safe-area-inset-top)) + 44px);
+    top: max(8px, env(safe-area-inset-top));
     right: auto;
     left: max(8px, env(safe-area-inset-left));
     width: calc(100vw - max(8px, env(safe-area-inset-left)) - max(8px, env(safe-area-inset-right)));
     max-width: none;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    padding: 8px 10px;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    padding: 9px 42px 10px 10px;
+    position: absolute;
     transform: none;
   }
 
   .gps-alert-action {
+    grid-column: 2;
+    justify-self: start;
     min-height: 26px;
+    margin-top: 5px;
     padding: 0 8px;
     font-size: 0.66rem;
   }
@@ -3629,15 +3683,21 @@ button {
     display: none;
   }
 
+  .gps-alert .marine-alert-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+  }
+
   .marine-alert.below-gps-alert {
-    top: calc(max(8px, env(safe-area-inset-top)) + 118px);
+    top: calc(max(8px, env(safe-area-inset-top)) + 88px);
   }
 
   .maplibregl-ctrl-bottom-right {
     right: max(6px, env(safe-area-inset-right));
     bottom: calc(
       122px + max(env(safe-area-inset-bottom), 18px) +
-        var(--mobile-browser-bottom-offset) + 8px
+        var(--mobile-panel-bottom-clearance) + 8px
     );
   }
 
@@ -3757,13 +3817,14 @@ button {
     white-space: normal;
   }
 
-  .readout-grid {
+  .motion-readouts {
     grid-area: motion;
     display: block;
     min-width: 0;
   }
 
-  .readout-grid > .readout:not(.motion-readout) {
+  .coordinate-readouts,
+  .motion-readouts > .readout:not(.motion-readout) {
     display: none;
   }
 

@@ -2176,12 +2176,7 @@ function NavigationApp() {
         layout: {
           visibility: initialBeachMarkerVisibility,
           "icon-image": "beach-icon",
-          "icon-size": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            0.85,
-            0.6,
-          ],
+          "icon-size": 0.6,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "center",
@@ -2245,12 +2240,7 @@ function NavigationApp() {
         layout: {
           visibility: initialHarborMarkerVisibility,
           "icon-image": "harbor-icon",
-          "icon-size": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            0.85,
-            0.6,
-          ],
+          "icon-size": 0.6,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "center",

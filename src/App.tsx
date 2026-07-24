@@ -1508,16 +1508,16 @@ function LandingPage({ onStart }: { onStart: () => void }) {
         </header>
 
         <div className="landing-hero-content">
-          <p className="landing-eyebrow">Enklere navigering på sjøen</p>
+          <p className="landing-eyebrow">Enklere navigasjon på sjøen</p>
           <h1>SeaNav</h1>
-          <p className="landing-statement">Ikke enda en app.</p>
+          <p className="landing-statement">Sjønavigasjon helt gratis.</p>
           <p className="landing-intro">
-            Ingen innlogging. Ikke noe abonnement. Bare enkel navigering og
-            sjøkart, klart når du trenger det.
+            Ingen innlogging. Ingen abonnement. Bare sjøkart og navigasjon –
+            klart til bruk når du trenger det.
           </p>
           <div className="landing-actions">
             <button className="landing-primary-cta" type="button" onClick={onStart}>
-              Start gratis navigering
+              Start gratis navigasjon
               <ArrowRight size={19} />
             </button>
             {showInstall && (
@@ -1536,7 +1536,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
                 Installer som app
               </button>
             )}
-            <span>Gratis å bruke. Rett i nettleseren.</span>
+            <span>Gratis å bruke, rett i nettleseren.</span>
             {showIosHint && isIos && !canInstall && (
               <p className="landing-install-hint">
                 Trykk <strong>Del</strong>-knappen nederst i Safari og velg{" "}
@@ -1563,19 +1563,19 @@ function LandingPage({ onStart }: { onStart: () => void }) {
             <UserRoundX size={24} />
             <span>01</span>
             <h3>Ingen innlogging</h3>
-            <p>Ingen konto å opprette og ingen personopplysninger å fylle ut.</p>
+            <p>Ingen konto å opprette, og ingen personopplysninger å oppgi.</p>
           </article>
           <article>
             <CircleDollarSign size={24} />
             <span>02</span>
-            <h3>Ikke noe abonnement</h3>
-            <p>SeaNav er helt gratis å bruke, uten prøveperiode eller binding.</p>
+            <h3>Ingen abonnement</h3>
+            <p>Helt gratis å bruke – uten prøveperiode eller binding.</p>
           </article>
           <article>
             <Compass size={24} />
             <span>03</span>
-            <h3>Bare navigering</h3>
-            <p>Sjøkart, posisjon, fart og kurs samlet i en ryddig visning.</p>
+            <h3>Bare navigasjon</h3>
+            <p>Sjøkart, posisjon, fart og kurs samlet i én ryddig visning.</p>
           </article>
         </div>
       </section>

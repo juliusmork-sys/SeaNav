@@ -4846,6 +4846,17 @@ button {
   justify-items: start;
 }
 
+.popup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popup-title > svg {
+  flex: none;
+  color: rgb(var(--popup-accent));
+}
+
 .popup-type-badge {
   justify-self: start;
   padding: 2px 9px;

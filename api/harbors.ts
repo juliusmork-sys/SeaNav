@@ -32,9 +32,11 @@ type OverpassResponse = { elements?: OverpassElement[] };
 // Flere speil: overpass-api.de returnerer jevnlig 504/429 på travle tider.
 // Prøv speilene i rekkefølge slik at ett tregt speil ikke gir tomt resultat.
 // Overpass brukes bare av ingest-cron; request-path leser kun DB.
+// Rekkefølge = prioritet. kumi.systems er mest stabil under last i praksis;
+// overpass-api.de 504'er ofte på tunge tiles, så den er ikke lenger først.
 const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
@@ -239,10 +241,11 @@ function norwayGridTiles(): BoundingBox[] {
 // tiles svarer raskt.
 const TILE_BATCH_SIZE = 6;
 const TILE_TIMEOUT_MS = 25000;
-// Ingest prøver bare ett speil per tile: den ekstra seamark-spørringen gjorde
-// 2 speil × 48 tiles for dyrt (300s-timeout). En mislykket tile hoppes over og
-// tas neste kjøring; pruning venter uansett 14 dager.
-const INGEST_MAX_ENDPOINTS = 1;
+// 2 speil per tile: nok fallback til å redde en 504 fra første speil uten at
+// retries sprenger budsjettet. Tidsgrensa under (HARBOR_INGEST_BUDGET_MS) er
+// den egentlige beskyttelsen mot 300s-timeout, ikke lavt speil-tall — å pinne
+// til 1 speil ga i praksis 0 havner når toppspeilet 504'et.
+const INGEST_MAX_ENDPOINTS = 2;
 // Hard tidsgrense for havne-delen slik at funksjonen aldri når Vercels 300s.
 // Ved overskridelse upsertes det vi har rukket; resten tas neste kjøring.
 const HARBOR_INGEST_BUDGET_MS = 220000;

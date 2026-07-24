@@ -4911,7 +4911,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border: 0;
   border-radius: 8px;
   color: rgb(var(--popup-accent));
@@ -4919,6 +4919,7 @@ button {
   font: inherit;
   font-size: 0.72rem;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
 

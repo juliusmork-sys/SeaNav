@@ -952,18 +952,26 @@ function createHarborIconImageData() {
   if (!context) return null;
 
   context.clearRect(0, 0, size, size);
-
-  // Tegn lucide "anchor" (24x24 viewBox) — samme ikon som kartlag-knappen.
-  // Halo-laget under markøren gir den hvite bakgrunnssirkelen, så ikonet
-  // trenger bare selve ankeret.
-  const scale = (size / 24) * 0.72;
-  const inset = (size - 24 * scale) / 2;
-  context.translate(inset, inset);
-  context.scale(scale, scale);
-  context.strokeStyle = "#007590";
-  context.lineWidth = 2;
   context.lineCap = "round";
   context.lineJoin = "round";
+
+  // Hvit bakgrunnssirkel så markøren er synlig over alle basiskart.
+  context.fillStyle = "rgba(255, 255, 255, 0.96)";
+  context.strokeStyle = "rgba(31, 41, 55, 0.22)";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(32, 32, 25, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  // Tegn lucide "anchor" (24x24 viewBox), sentrert i sirkelen — samme ikon
+  // som kartlag-knappen bruker.
+  const scale = 1.7;
+  context.save();
+  context.translate(32 - 12 * scale, 32 - 12 * scale);
+  context.scale(scale, scale);
+  context.strokeStyle = "#007590";
+  context.lineWidth = 2.1;
 
   // circle cx=12 cy=5 r=3
   context.beginPath();
@@ -983,6 +991,7 @@ function createHarborIconImageData() {
   context.arc(12, 12, 10, Math.PI, Math.PI * 2);
   context.lineTo(19, 12);
   context.stroke();
+  context.restore();
 
   return context.getImageData(0, 0, size, size);
 }
@@ -1130,9 +1139,10 @@ function HarborPopupContent({
           type="button"
           className="harbor-action-primary"
           onClick={onOpenMaps}
+          aria-label={text.openGoogleMaps}
         >
           <MapPin size={15} />
-          {text.openGoogleMaps}
+          Google Maps
         </button>
         {harbor.website && (
           <a

@@ -2134,8 +2134,8 @@ function NavigationApp() {
           "circle-radius": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            ["interpolate", ["linear"], ["zoom"], 9, 12, 14, 16],
-            ["interpolate", ["linear"], ["zoom"], 9, 8, 14, 11],
+            15,
+            10,
           ],
           "circle-stroke-color": [
             "case",
@@ -2160,8 +2160,8 @@ function NavigationApp() {
           "icon-size": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            ["interpolate", ["linear"], ["zoom"], 9, 0.72, 14, 0.95],
-            ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 0.68],
+            0.85,
+            0.6,
           ],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -2201,8 +2201,8 @@ function NavigationApp() {
           "circle-radius": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            ["interpolate", ["linear"], ["zoom"], 9, 12, 14, 16],
-            ["interpolate", ["linear"], ["zoom"], 9, 8, 14, 11],
+            15,
+            10,
           ],
           "circle-stroke-color": [
             "case",
@@ -2228,8 +2228,8 @@ function NavigationApp() {
           "icon-size": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            ["interpolate", ["linear"], ["zoom"], 9, 0.72, 14, 0.95],
-            ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 0.68],
+            0.85,
+            0.6,
           ],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,

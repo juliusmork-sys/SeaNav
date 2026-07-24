@@ -1,6 +1,7 @@
 import {
   ensureSchema,
   isDbConfigured,
+  pruneStaleHarbors,
   selectHarborsInBbox,
   upsertHarbors,
   type BoundingBox,
@@ -203,7 +204,14 @@ export async function fetchAllNorwayHarbors(): Promise<HarborRow[]> {
 export async function ingestHarbors(): Promise<number> {
   await ensureSchema();
   const rows = await fetchAllNorwayHarbors();
-  return upsertHarbors(rows);
+  const upserted = await upsertHarbors(rows);
+  // Bare fjern havner som ikke er sett på 14 dager, ikke etter hver kjøring
+  // — en enkelt Overpass-rate-limitert natt skal ikke slette gyldige havner.
+  if (rows.length > 0) {
+    const pruned = await pruneStaleHarbors();
+    if (pruned > 0) console.log(`Pruned ${pruned} stale harbors`);
+  }
+  return upserted;
 }
 
 function harborsToFeatureCollection(rows: HarborRow[]) {

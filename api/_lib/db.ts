@@ -75,6 +75,19 @@ export async function ensureSchema() {
   await sql`create index if not exists beaches_bbox on beaches (lat, lon)`;
 }
 
+// Overpass rate-limiter (429) kan gjøre en enkelt ingest-kjøring ufullstendig,
+// så vi venter flere sykluser (dager) før en havn regnes som virkelig borte fra
+// OSM og ikke bare midlertidig ikke-hentet.
+export async function pruneStaleHarbors(olderThanDays = 14): Promise<number> {
+  if (!sql) return 0;
+  const rows = (await sql`
+    delete from harbors
+    where updated_at < now() - make_interval(days => ${olderThanDays})
+    returning id
+  `) as { id: string }[];
+  return rows.length;
+}
+
 export async function countHarbors(): Promise<number> {
   if (!sql) return 0;
   const rows = (await sql`select count(*)::int as n from harbors`) as {

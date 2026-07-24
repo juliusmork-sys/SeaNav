@@ -344,6 +344,11 @@ const UI_TEXT = {
     harborTypeMarina: "Marina",
     harborTypeHarbour: "Havn",
     beachBadge: "Badeplass",
+    waterQualityLabels: {
+      good: "God vannkvalitet",
+      fair: "Mindre god vannkvalitet",
+      poor: "Ikke akseptabel vannkvalitet",
+    },
     harborOpenAllHours: "Åpent hele døgnet",
     harborCapacityUnit: (count: number) => `${count} båtplasser`,
     amenityLabels: {
@@ -561,6 +566,11 @@ const UI_TEXT = {
     harborTypeMarina: "Marina",
     harborTypeHarbour: "Harbour",
     beachBadge: "Bathing spot",
+    waterQualityLabels: {
+      good: "Good water quality",
+      fair: "Fair water quality",
+      poor: "Not acceptable water quality",
+    },
     harborOpenAllHours: "Open around the clock",
     harborCapacityUnit: (count: number) => `${count} berths`,
     amenityLabels: {
@@ -883,9 +893,66 @@ const BEACH_ICON_PATHS = [
   "M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 1 -.25",
 ];
 
+// Vannkvalitetsfarger (trafikklys). "Ukjent" har ingen farge -> ingen dråpe.
+const BEACH_QUALITY_STYLE = {
+  good: "#16a34a",
+  fair: "#f59e0b",
+  poor: "#dc2626",
+} as const;
+
+type BeachQualityKey = keyof typeof BEACH_QUALITY_STYLE;
+
+// Kartlegg rå Tilstand-verdi (God / Mindre god / Ikke akseptabel / ukjent) til
+// en normalisert nøkkel. Alt annet (inkl. "ukjent" og null) -> null.
+function getBeachQualityKey(
+  properties: maplibregl.MapGeoJSONFeature["properties"] | undefined,
+): BeachQualityKey | null {
+  const raw = properties?.waterQuality ?? properties?.Tilstand;
+  if (typeof raw !== "string") return null;
+  switch (raw.trim().toLowerCase()) {
+    case "god":
+      return "good";
+    case "mindre god":
+      return "fair";
+    case "ikke akseptabel":
+      return "poor";
+    default:
+      return null;
+  }
+}
+
+// Tegn en dråpeformet kvalitetsbadge (spiss opp) med hvit kant for kontrast.
+function drawQualityDroplet(
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  color: string,
+) {
+  context.save();
+  context.beginPath();
+  context.moveTo(centerX, centerY - radius * 1.7);
+  context.quadraticCurveTo(centerX + radius, centerY - radius, centerX + radius, centerY);
+  context.arc(centerX, centerY, radius, 0, Math.PI, false);
+  context.quadraticCurveTo(centerX - radius, centerY - radius, centerX, centerY - radius * 1.7);
+  context.closePath();
+  context.lineJoin = "round";
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 3;
+  context.stroke();
+  context.fillStyle = color;
+  context.fill();
+  context.restore();
+}
+
 // Tegn hvit bakgrunnssirkel + ikon (SVG-paths) sentrert. Path2D gir eksakt
-// samme geometri som Lucide/Tabler-ikonene.
-function createMarkerIconImageData(paths: string[], strokeColor: string) {
+// samme geometri som Lucide/Tabler-ikonene. Valgfri badgeColor tegner en
+// dråpeformet kvalitetsindikator nede til høyre.
+function createMarkerIconImageData(
+  paths: string[],
+  strokeColor: string,
+  badgeColor?: string,
+) {
   const size = 64;
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -916,11 +983,15 @@ function createMarkerIconImageData(paths: string[], strokeColor: string) {
   }
   context.restore();
 
+  if (badgeColor) {
+    drawQualityDroplet(context, 48, 46, 9, badgeColor);
+  }
+
   return context.getImageData(0, 0, size, size);
 }
 
-function createBeachIconImageData() {
-  return createMarkerIconImageData(BEACH_ICON_PATHS, "#ea580c");
+function createBeachIconImageData(badgeColor?: string) {
+  return createMarkerIconImageData(BEACH_ICON_PATHS, "#ea580c", badgeColor);
 }
 
 function createBeachAreaPatternImageData() {
@@ -1140,6 +1211,11 @@ function HarborPopupContent({
 const BEACH_ICON_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BEACH_ICON_PATHS.map(
   (definition) => `<path d="${definition}" />`,
 ).join("")}</svg>`;
+
+// Fylt dråpe (Tabler ti-droplet), farget etter vannkvalitet i popup-linjen.
+function beachQualityDropletSvg(color: string) {
+  return `<svg viewBox="0 0 24 24" width="15" height="15" fill="${color}" aria-hidden="true"><path d="M6.8 11a6 6 0 1 0 10.396 0l-5.197 -8l-5.2 8z" /></svg>`;
+}
 
 function escapePopupText(value: string) {
   return value.replace(/[&<>"']/g, (character) => {
@@ -2038,9 +2114,18 @@ function NavigationApp() {
       const initialHarborMarkerVisibility = harborsVisibleRef.current
         ? "visible"
         : "none";
-      const beachIcon = createBeachIconImageData();
-      if (beachIcon && !map.hasImage("beach-icon")) {
-        map.addImage("beach-icon", beachIcon, { pixelRatio: 2 });
+      // Basisikon (ukjent kvalitet, ingen dråpe) + én variant per kvalitet.
+      const beachIconVariants: Array<[string, string | undefined]> = [
+        ["beach-icon", undefined],
+        ["beach-icon-good", BEACH_QUALITY_STYLE.good],
+        ["beach-icon-fair", BEACH_QUALITY_STYLE.fair],
+        ["beach-icon-poor", BEACH_QUALITY_STYLE.poor],
+      ];
+      for (const [imageName, badgeColor] of beachIconVariants) {
+        const image = createBeachIconImageData(badgeColor);
+        if (image && !map.hasImage(imageName)) {
+          map.addImage(imageName, image, { pixelRatio: 2 });
+        }
       }
       const beachAreaPattern = createBeachAreaPatternImageData();
       if (beachAreaPattern && !map.hasImage("beach-area-pattern")) {
@@ -2175,7 +2260,17 @@ function NavigationApp() {
         source: "beach-markers",
         layout: {
           visibility: initialBeachMarkerVisibility,
-          "icon-image": "beach-icon",
+          "icon-image": [
+            "match",
+            ["downcase", ["to-string", ["coalesce", ["get", "waterQuality"], ""]]],
+            "god",
+            "beach-icon-good",
+            "mindre god",
+            "beach-icon-fair",
+            "ikke akseptabel",
+            "beach-icon-poor",
+            "beach-icon",
+          ],
           "icon-size": 0.85,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -2274,6 +2369,10 @@ function NavigationApp() {
         lngLat: maplibregl.LngLat,
       ) => {
         const name = getBeachFeatureName(feature.properties);
+        const qualityKey = getBeachQualityKey(feature.properties);
+        const qualityRow = qualityKey
+          ? `<div class="popup-quality" style="color:${BEACH_QUALITY_STYLE[qualityKey]}">${beachQualityDropletSvg(BEACH_QUALITY_STYLE[qualityKey])}<span>${escapePopupText(text.waterQualityLabels[qualityKey])}</span></div>`
+          : "";
         const popup = new maplibregl.Popup({
           closeButton: true,
           closeOnClick: true,
@@ -2282,7 +2381,7 @@ function NavigationApp() {
         })
           .setLngLat(lngLat)
           .setHTML(
-            `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span></div>`,
+            `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span>${qualityRow}</div>`,
           )
           .addTo(map);
 

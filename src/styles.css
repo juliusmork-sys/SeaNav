@@ -4882,6 +4882,18 @@ button {
   letter-spacing: 0.01em;
 }
 
+.popup-quality {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.popup-quality svg {
+  flex: none;
+}
+
 .harbor-meta {
   display: grid;
   gap: 6px;

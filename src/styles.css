@@ -316,47 +316,46 @@ button {
 
 .landing-principle-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 72px;
-  border-top: 1px solid var(--sea-hairline);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 56px;
 }
 
 .landing-principle-grid article {
-  position: relative;
   min-width: 0;
-  min-height: 236px;
-  padding: 34px 34px 0 0;
+  padding: 30px 30px 32px;
+  background: #fff;
+  border: 1px solid var(--sea-hairline);
+  border-radius: 14px;
 }
 
-.landing-principle-grid article + article {
-  padding-left: 34px;
-  border-left: 1px solid var(--sea-hairline);
-}
-
-.landing-principle-grid svg {
+.landing-principle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--sea-ice-soft);
   color: var(--sea-azure-deep);
 }
 
-.landing-principle-grid article > span {
-  position: absolute;
-  top: 36px;
-  right: 28px;
-  color: #7a93aa;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 0.82rem;
+.landing-principle-icon--foam {
+  background: #d6efe5;
+  color: #0f6e56;
 }
 
 .landing-principle-grid h3 {
-  margin: 38px 0 0;
+  margin: 20px 0 0;
   color: var(--sea-ink);
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.55rem;
+  font-size: 1.45rem;
   font-weight: 600;
 }
 
 .landing-principle-grid p {
-  max-width: 310px;
-  margin: 13px 0 0;
+  max-width: 360px;
+  margin: 10px 0 0;
   color: var(--sea-ink-muted);
   font-size: 0.94rem;
   line-height: 1.55;
@@ -488,27 +487,16 @@ button {
 
   .landing-principle-grid {
     grid-template-columns: 1fr;
-    margin-top: 46px;
+    gap: 14px;
+    margin-top: 40px;
   }
 
-  .landing-principle-grid article,
-  .landing-principle-grid article + article {
-    min-height: 0;
-    padding: 30px 0 34px;
-    border-left: 0;
-  }
-
-  .landing-principle-grid article + article {
-    border-top: 1px solid var(--sea-hairline);
-  }
-
-  .landing-principle-grid article > span {
-    top: 32px;
-    right: 0;
+  .landing-principle-grid article {
+    padding: 26px 24px 28px;
   }
 
   .landing-principle-grid h3 {
-    margin-top: 22px;
+    margin-top: 18px;
   }
 
   .landing-closing {

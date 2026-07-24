@@ -6,10 +6,8 @@ import {
   ArrowRight,
   Anchor,
   BookOpen,
-  CircleDollarSign,
   Clock,
   CloudSun,
-  Compass,
   Crosshair,
   Download,
   Droplet,
@@ -30,7 +28,6 @@ import {
   ShowerHead,
   SlidersHorizontal,
   Toilet,
-  UserRoundX,
   Wind,
   X,
   Waves,
@@ -1628,28 +1625,38 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 
       <section className="landing-principles" id="slik-virker-det">
         <div className="landing-section-intro">
-          <p>Alt du trenger. Ingenting i veien.</p>
-          <h2>Fra land til sjøkart på ett trykk.</h2>
+          <p>Bygget for norske farvann</p>
+          <h2>Sjøkart, posisjon og havner – alt i én app.</h2>
         </div>
 
         <div className="landing-principle-grid">
           <article>
-            <UserRoundX size={24} />
-            <span>01</span>
-            <h3>Ingen innlogging</h3>
-            <p>Ingen konto å opprette, og ingen personopplysninger å oppgi.</p>
+            <span className="landing-principle-icon">
+              <MapIcon size={30} />
+            </span>
+            <h3>Offisielle sjøkart</h3>
+            <p>Dybdekoter, skjær og seilingsmerker rett fra Kartverket – alltid oppdatert.</p>
           </article>
           <article>
-            <CircleDollarSign size={24} />
-            <span>02</span>
-            <h3>Ingen abonnement</h3>
-            <p>Helt gratis å bruke – uten prøveperiode eller binding.</p>
+            <span className="landing-principle-icon">
+              <LocateFixed size={30} />
+            </span>
+            <h3>Posisjon, fart og kurs</h3>
+            <p>Se hvor du er i sanntid, med fart over grunn og kurs – i én ryddig visning.</p>
           </article>
           <article>
-            <Compass size={24} />
-            <span>03</span>
-            <h3>Bare navigasjon</h3>
-            <p>Sjøkart, posisjon, fart og kurs samlet i én ryddig visning.</p>
+            <span className="landing-principle-icon">
+              <Anchor size={30} />
+            </span>
+            <h3>Havner &amp; gjestehavner</h3>
+            <p>Finn nærmeste havn, fortøyning og fasiliteter langs hele kysten.</p>
+          </article>
+          <article>
+            <span className="landing-principle-icon landing-principle-icon--foam">
+              <Waves size={30} />
+            </span>
+            <h3>Badeplasser &amp; vannkvalitet</h3>
+            <p>Nærmeste strand med fersk vannkvalitet – vet før du hopper uti.</p>
           </article>
         </div>
       </section>

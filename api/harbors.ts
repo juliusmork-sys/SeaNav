@@ -79,7 +79,12 @@ function normalizeWebsite(tags: Record<string, string>) {
 }
 
 // Kjør en vilkårlig Overpass-spørring og parse elementene til rader.
-async function runOverpass(query: string, timeoutMs: number): Promise<HarborRow[]> {
+// dedupeSeen kan sendes inn utenfra for å dedupe på tvers av flere kall (grid-splitting).
+async function runOverpass(
+  query: string,
+  timeoutMs: number,
+  dedupeSeen?: Set<string>,
+): Promise<HarborRow[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -95,7 +100,7 @@ async function runOverpass(query: string, timeoutMs: number): Promise<HarborRow[
     if (!upstream.ok) throw new Error(`Overpass returned ${upstream.status}`);
 
     const payload = (await upstream.json()) as { elements?: OverpassElement[] };
-    const seen = new Set<string>();
+    const seen = dedupeSeen ?? new Set<string>();
     const rows: HarborRow[] = [];
     for (const element of payload.elements ?? []) {
       const tags = element.tags ?? {};
@@ -137,10 +142,62 @@ async function fetchLiveHarbors(bounds: BoundingBox): Promise<HarborRow[]> {
   return runOverpass(query, 16000);
 }
 
-// Full ingest: alle havner i Norge (brukes av cron via /api/ingest).
+// Norge dekker ca lat 57.8-71.5, lon 4-31.5. Hele landet i én Overpass-spørring
+// gir 504 fra overpass-api.de (for tung server-side) selv med lang timeout.
+// Del i et grid av mindre bbox-spørringer i stedet, kjørt sekvensielt.
+const NORWAY_BOUNDS = { south: 57.8, west: 4.0, north: 71.6, east: 31.5 };
+const GRID_LAT_STEPS = 5;
+const GRID_LON_STEPS = 3;
+
+function norwayGridTiles(): BoundingBox[] {
+  const tiles: BoundingBox[] = [];
+  const latStep = (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south) / GRID_LAT_STEPS;
+  const lonStep = (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west) / GRID_LON_STEPS;
+  for (let latIndex = 0; latIndex < GRID_LAT_STEPS; latIndex += 1) {
+    for (let lonIndex = 0; lonIndex < GRID_LON_STEPS; lonIndex += 1) {
+      tiles.push({
+        south: NORWAY_BOUNDS.south + latIndex * latStep,
+        north: NORWAY_BOUNDS.south + (latIndex + 1) * latStep,
+        west: NORWAY_BOUNDS.west + lonIndex * lonStep,
+        east: NORWAY_BOUNDS.west + (lonIndex + 1) * lonStep,
+      });
+    }
+  }
+  return tiles;
+}
+
+// Full ingest: alle havner i Norge, gitt som grid av bbox-kall (brukes av cron via /api/ingest).
+// Kjøres i batcher parallelt (ikke sekvensielt) siden /api/ingest deler 300s
+// maxDuration med beach-ingest.
+const TILE_BATCH_SIZE = 4;
+const TILE_TIMEOUT_MS = 25000;
+
 export async function fetchAllNorwayHarbors(): Promise<HarborRow[]> {
-  const query = `[out:json][timeout:180];area["ISO3166-1"="NO"][admin_level=2]->.no;(nwr["leisure"="marina"](area.no);nwr["harbour"](area.no);nwr["seamark:type"="harbour"](area.no););out center tags;`;
-  return runOverpass(query, 200000);
+  const seen = new Set<string>();
+  const rows: HarborRow[] = [];
+  const tiles = norwayGridTiles();
+
+  for (let index = 0; index < tiles.length; index += TILE_BATCH_SIZE) {
+    const batch = tiles.slice(index, index + TILE_BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((tile) => {
+        const box = `${tile.south},${tile.west},${tile.north},${tile.east}`;
+        const query = `[out:json][timeout:20];(nwr["leisure"="marina"](${box});nwr["harbour"](${box});nwr["seamark:type"="harbour"](${box}););out center tags;`;
+        return runOverpass(query, TILE_TIMEOUT_MS, seen);
+      }),
+    );
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        rows.push(...result.value);
+      } else {
+        // Én mislykket tile skal ikke stoppe resten av landet.
+        console.error(
+          `Overpass tile failed: ${result.reason instanceof Error ? result.reason.message : "unknown"}`,
+        );
+      }
+    }
+  }
+  return rows;
 }
 
 export async function ingestHarbors(): Promise<number> {

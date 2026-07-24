@@ -32,19 +32,27 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     errors: [],
   };
 
-  try {
-    result.harbors = await ingestHarbors();
-  } catch (error) {
+  // Kjør parallelt, ikke sekvensielt: de treffer ulike upstreams (Overpass vs
+  // Miljødirektoratet-ArcGIS), så samlet veggklokketid blir max(a, b) i stedet
+  // for a + b. Sekvensiell kjøring sprengte 300s-budsjettet.
+  const [harborsOutcome, beachesOutcome] = await Promise.allSettled([
+    ingestHarbors(),
+    ingestBeaches(),
+  ]);
+
+  if (harborsOutcome.status === "fulfilled") {
+    result.harbors = harborsOutcome.value;
+  } else {
     result.errors.push(
-      `harbors: ${error instanceof Error ? error.message : "unknown"}`,
+      `harbors: ${harborsOutcome.reason instanceof Error ? harborsOutcome.reason.message : "unknown"}`,
     );
   }
 
-  try {
-    result.beaches = await ingestBeaches();
-  } catch (error) {
+  if (beachesOutcome.status === "fulfilled") {
+    result.beaches = beachesOutcome.value;
+  } else {
     result.errors.push(
-      `beaches: ${error instanceof Error ? error.message : "unknown"}`,
+      `beaches: ${beachesOutcome.reason instanceof Error ? beachesOutcome.reason.message : "unknown"}`,
     );
   }
 

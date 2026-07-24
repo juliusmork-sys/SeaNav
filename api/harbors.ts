@@ -233,22 +233,38 @@ function norwayGridTiles(): BoundingBox[] {
 // Full ingest: alle havner i Norge, gitt som grid av bbox-kall (brukes av cron via /api/ingest).
 // Kjøres i batcher parallelt (ikke sekvensielt) siden /api/ingest deler 300s
 // maxDuration med beach-ingest.
-// Lav samtidighet (4) unngår at Overpass struper de parallelle kallene; for høy
-// batch gjorde at alle tiles gikk i timeout. 25s rekker for en liten tile selv
-// under noe last. 48 tiles / 4 = 12 batcher; tomme hav-/innlandstiles svarer
-// raskt, så reell tid ligger godt under 300s-budsjettet.
-const TILE_BATCH_SIZE = 4;
+// Høyere samtidighet (6) => færre sekvensielle batcher, og siden hver tile nå
+// også henter seamark small_craft_facility (tyngre), er dette nødvendig for å
+// holde oss under budsjettet. 48 tiles / 6 = 8 batcher; tomme hav-/innlands-
+// tiles svarer raskt.
+const TILE_BATCH_SIZE = 6;
 const TILE_TIMEOUT_MS = 25000;
-// Ingest prøver maks 2 speil per tile: nok til å redde en enkelt 504 uten at
-// retries sprenger 300s-budsjettet.
-const INGEST_MAX_ENDPOINTS = 2;
+// Ingest prøver bare ett speil per tile: den ekstra seamark-spørringen gjorde
+// 2 speil × 48 tiles for dyrt (300s-timeout). En mislykket tile hoppes over og
+// tas neste kjøring; pruning venter uansett 14 dager.
+const INGEST_MAX_ENDPOINTS = 1;
+// Hard tidsgrense for havne-delen slik at funksjonen aldri når Vercels 300s.
+// Ved overskridelse upsertes det vi har rukket; resten tas neste kjøring.
+const HARBOR_INGEST_BUDGET_MS = 220000;
 
-export async function fetchAllNorwayHarbors(): Promise<HarborRow[]> {
+export async function fetchAllNorwayHarbors(): Promise<{
+  rows: HarborRow[];
+  complete: boolean;
+}> {
+  const startedAt = Date.now();
   const seen = new Set<string>();
   const rows: HarborRow[] = [];
   const tiles = norwayGridTiles();
+  let complete = true;
 
   for (let index = 0; index < tiles.length; index += TILE_BATCH_SIZE) {
+    if (Date.now() - startedAt > HARBOR_INGEST_BUDGET_MS) {
+      console.warn(
+        `Harbor ingest budget reached after ${index}/${tiles.length} tiles; upserting partial result.`,
+      );
+      complete = false;
+      break;
+    }
     const batch = tiles.slice(index, index + TILE_BATCH_SIZE);
     const results = await Promise.allSettled(
       batch.map((tile) => {
@@ -268,16 +284,17 @@ export async function fetchAllNorwayHarbors(): Promise<HarborRow[]> {
       }
     }
   }
-  return rows;
+  return { rows, complete };
 }
 
 export async function ingestHarbors(): Promise<number> {
   await ensureSchema();
-  const rows = await fetchAllNorwayHarbors();
+  const { rows, complete } = await fetchAllNorwayHarbors();
   const upserted = await upsertHarbors(rows);
-  // Bare fjern havner som ikke er sett på 14 dager, ikke etter hver kjøring
-  // — en enkelt Overpass-rate-limitert natt skal ikke slette gyldige havner.
-  if (rows.length > 0) {
+  // Bare prune når kjøringen var komplett (alle tiles) og faktisk hentet noe —
+  // ellers kan en delvis/budsjett-avbrutt kjøring slette gyldige havner fra
+  // tiles vi hoppet over. Pruning fjerner uansett bare rader eldre enn 14 dager.
+  if (complete && rows.length > 0) {
     const pruned = await pruneStaleHarbors();
     if (pruned > 0) console.log(`Pruned ${pruned} stale harbors`);
   }

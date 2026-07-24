@@ -2152,8 +2152,8 @@ function NavigationApp() {
           "circle-radius": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            15,
-            10,
+            18,
+            13,
           ],
           "circle-stroke-color": [
             "case",
@@ -2176,7 +2176,7 @@ function NavigationApp() {
         layout: {
           visibility: initialBeachMarkerVisibility,
           "icon-image": "beach-icon",
-          "icon-size": 0.6,
+          "icon-size": 0.85,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "center",
@@ -2216,8 +2216,8 @@ function NavigationApp() {
           "circle-radius": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            15,
-            10,
+            18,
+            13,
           ],
           "circle-stroke-color": [
             "case",
@@ -2240,7 +2240,7 @@ function NavigationApp() {
         layout: {
           visibility: initialHarborMarkerVisibility,
           "icon-image": "harbor-icon",
-          "icon-size": 0.6,
+          "icon-size": 0.85,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "center",
@@ -2269,10 +2269,10 @@ function NavigationApp() {
         map.setFeatureState(selectedMarker, { selected: true });
       };
 
-      const showBeachPopup = (event: maplibregl.MapLayerMouseEvent) => {
-        const feature = event.features?.[0];
-        if (!feature) return;
-
+      const showBeachPopup = (
+        feature: maplibregl.MapGeoJSONFeature,
+        lngLat: maplibregl.LngLat,
+      ) => {
         const name = getBeachFeatureName(feature.properties);
         const popup = new maplibregl.Popup({
           closeButton: true,
@@ -2280,7 +2280,7 @@ function NavigationApp() {
           offset: 16,
           className: "beach-popup",
         })
-          .setLngLat(event.lngLat)
+          .setLngLat(lngLat)
           .setHTML(
             `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span></div>`,
           )
@@ -2296,8 +2296,22 @@ function NavigationApp() {
         map.getCanvas().style.cursor = "";
       };
 
+      // Ett klikk kan treffe flere overlappende badelag samtidig (halo +
+      // markør + areal). Bruk ett samlet klikk-håndtak og vis kun én popup for
+      // øverste treff, ellers stables flere popups oppå hverandre og må lukkes
+      // en etter en.
+      const handleBeachClick = (event: maplibregl.MapMouseEvent) => {
+        const hitLayers = beachPopupLayers.filter((id) => map.getLayer(id));
+        if (hitLayers.length === 0) return;
+        const features = map.queryRenderedFeatures(event.point, {
+          layers: hitLayers,
+        });
+        if (features.length === 0) return;
+        showBeachPopup(features[0], event.lngLat);
+      };
+      map.on("click", handleBeachClick);
+
       beachPopupLayers.forEach((layerId) => {
-        map.on("click", layerId, showBeachPopup);
         map.on("mouseenter", layerId, showPointer);
         map.on("mouseleave", layerId, hidePointer);
       });

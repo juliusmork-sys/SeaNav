@@ -272,7 +272,10 @@ export async function fetchAllNorwayHarbors(): Promise<{
     const results = await Promise.allSettled(
       batch.map((tile) => {
         const box = `${tile.south},${tile.west},${tile.north},${tile.east}`;
-        const query = `[out:json][timeout:25];(nwr["leisure"="marina"](${box});nwr["harbour"](${box});nwr["seamark:type"="harbour"](${box});nwr["seamark:type"="small_craft_facility"](${box}););out center tags;`;
+        // Begrens til norske havner via area-filter: grid-bboxen er rektangulær
+        // og drar ellers inn svenske/finske/russiske havner langs grensa. Norge
+        // ≈ sjøkart-dekningen vår. (area.no)(bbox) krever at begge matcher.
+        const query = `[out:json][timeout:25];area["ISO3166-1"="NO"][admin_level=2]->.no;(nwr["leisure"="marina"](area.no)(${box});nwr["harbour"](area.no)(${box});nwr["seamark:type"="harbour"](area.no)(${box});nwr["seamark:type"="small_craft_facility"](area.no)(${box}););out center tags;`;
         return runOverpass(query, TILE_TIMEOUT_MS, seen, INGEST_MAX_ENDPOINTS);
       }),
     );

@@ -1,10 +1,14 @@
 import { neon } from "@neondatabase/serverless";
 
 // Neon-integrasjonen i Vercel setter DATABASE_URL; POSTGRES_URL støttes som
-// alternativ. Tom streng => DB ikke konfigurert => kallere faller tilbake til
-// live-API.
+// alternativ. NEON_PROD_DATABASE_URL brukes lokalt (.env.local) slik at
+// `vercel dev` kan lese prod-cachen for havner/strender. Tom streng => DB ikke
+// konfigurert => kallere faller tilbake til live-API.
 const connectionString =
-  process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? "";
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_URL ??
+  process.env.NEON_PROD_DATABASE_URL ??
+  "";
 
 export const isDbConfigured = connectionString.length > 0;
 

@@ -339,25 +339,6 @@ function geometryMarkerPoint(
   return points[0] ?? geometryCenter(geometry);
 }
 
-function buildBeachUrl(latitude: number, longitude: number, radiusMeters: number) {
-  const bbox = bboxForRadius(latitude, longitude, radiusMeters);
-  const params = new URLSearchParams({
-    f: "geojson",
-    where: "1=1",
-    outFields:
-      "OBJECTID,Navn,Tilstand,Tilstandkommentar,Overvaking_badevannskvalitet,Kommunenavn,Kommunenr,Fylke",
-    returnGeometry: "true",
-    geometry: `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`,
-    geometryType: "esriGeometryEnvelope",
-    inSR: "4326",
-    outSR: "4326",
-    spatialRel: "esriSpatialRelIntersects",
-    resultRecordCount: "200",
-  });
-
-  return `${BEACH_ENDPOINT}?${params.toString()}`;
-}
-
 function getString(value: unknown) {
   if (typeof value === "string" && value.trim()) return value;
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -525,69 +506,31 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     return;
   }
 
-  // Egen DB først; tom (område uten badeplasser eller før første ingest) => live.
-  if (isDbConfigured) {
-    try {
-      const bbox = bboxForRadius(latitude, longitude, radiusMeters);
-      const rows = await selectBeachesInBbox(bbox);
-      if (rows.length > 0) {
-        const safeCollection: BeachFeatureCollection = {
-          type: "FeatureCollection",
-          features: rows.map(rowToBeachFeature),
-        };
-        response.status(200).json({
-          source: "SeaNav cache (Miljødirektoratet registrerte badeplasser)",
-          radiusMeters,
-          nearest: findNearestBeach(
-            safeCollection,
-            latitude,
-            longitude,
-            radiusMeters,
-          ),
-          featureCollection: safeCollection,
-          markerFeatureCollection: createBeachMarkers(safeCollection),
-        });
-        return;
-      }
-    } catch {
-      // Faller tilbake til live-API under.
-    }
+  // Kun egen DB i request-path: ingen live-fallback mot Miljødirektoratet ved
+  // brukerinteraksjon. Live-API brukes bare av ingest-cron (fetchAllBeaches).
+  // Tomt bbox-svar er et gyldig "ingen badeplasser her", ikke en feil.
+  if (!isDbConfigured) {
+    response.status(503).json({ error: "Beach database not configured." });
+    return;
   }
 
   try {
-    const upstream = await fetch(buildBeachUrl(latitude, longitude, radiusMeters), {
-      headers: {
-        accept: "application/geo+json, application/json",
-      },
-    });
-
-    if (!upstream.ok) {
-      response.status(502).json({
-        error: "Miljødirektoratet beach service unavailable.",
-        status: upstream.status,
-      });
-      return;
-    }
-
-    const collection = (await upstream.json()) as BeachFeatureCollection;
-    const features = Array.isArray(collection.features) ? collection.features : [];
+    const bbox = bboxForRadius(latitude, longitude, radiusMeters);
+    const rows = await selectBeachesInBbox(bbox);
     const safeCollection: BeachFeatureCollection = {
       type: "FeatureCollection",
-      features,
+      features: rows.map(rowToBeachFeature),
     };
-
     response.status(200).json({
-      source: "Miljødirektoratet registrerte badeplasser",
+      source: "SeaNav cache (Miljødirektoratet registrerte badeplasser)",
       radiusMeters,
       nearest: findNearestBeach(safeCollection, latitude, longitude, radiusMeters),
       featureCollection: safeCollection,
-      markerFeatureCollection: createBeachMarkers(
-        safeCollection,
-      ),
+      markerFeatureCollection: createBeachMarkers(safeCollection),
     });
   } catch (error) {
     response.status(502).json({
-      error: "Miljødirektoratet beach service unavailable.",
+      error: "Beach database query failed.",
       detail: error instanceof Error ? error.message : "Unknown error",
     });
   }

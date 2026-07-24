@@ -1598,6 +1598,8 @@ function NavigationApp() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const baseStyleLayerIdsRef = useRef<string[]>([]);
+  const beachDisplayModeRef = useRef<BeachDisplayMode>("off");
+  const harborsVisibleRef = useRef(false);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const lastFixRef = useRef<PositionFix | null>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -1659,7 +1661,7 @@ function NavigationApp() {
   const [chartVisible, setChartVisible] = useState(true);
   const [harborsVisible, setHarborsVisible] = useState(false);
   const [beachDisplayMode, setBeachDisplayMode] =
-    useState<BeachDisplayMode>("icons");
+    useState<BeachDisplayMode>("off");
   const [baseMap, setBaseMap] = useState<BaseMap>("map");
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -1987,6 +1989,14 @@ function NavigationApp() {
     [],
   );
 
+  useEffect(() => {
+    beachDisplayModeRef.current = beachDisplayMode;
+  }, [beachDisplayMode]);
+
+  useEffect(() => {
+    harborsVisibleRef.current = harborsVisible;
+  }, [harborsVisible]);
+
   const toggleHarbors = useCallback(() => {
     setHarborsVisible((current) => {
       const next = !current;
@@ -2023,6 +2033,13 @@ function NavigationApp() {
       baseStyleLayerIdsRef.current = (map.getStyle().layers ?? []).map(
         (layer) => layer.id,
       );
+      const initialBeachMarkerVisibility =
+        beachDisplayModeRef.current !== "off" ? "visible" : "none";
+      const initialBeachAreaVisibility =
+        beachDisplayModeRef.current === "areas" ? "visible" : "none";
+      const initialHarborMarkerVisibility = harborsVisibleRef.current
+        ? "visible"
+        : "none";
       const beachIcon = createBeachIconImageData();
       if (beachIcon && !map.hasImage("beach-icon")) {
         map.addImage("beach-icon", beachIcon, { pixelRatio: 2 });
@@ -2084,7 +2101,7 @@ function NavigationApp() {
         type: "fill",
         source: "beaches",
         layout: {
-          visibility: "none",
+          visibility: initialBeachAreaVisibility,
         },
         paint: {
           "fill-color": "#f97316",
@@ -2096,7 +2113,7 @@ function NavigationApp() {
         type: "fill",
         source: "beaches",
         layout: {
-          visibility: "none",
+          visibility: initialBeachAreaVisibility,
         },
         paint: {
           "fill-pattern": "beach-area-pattern",
@@ -2108,7 +2125,7 @@ function NavigationApp() {
         type: "line",
         source: "beaches",
         layout: {
-          visibility: "none",
+          visibility: initialBeachAreaVisibility,
         },
         paint: {
           "line-color": "#ea580c",
@@ -2128,6 +2145,9 @@ function NavigationApp() {
         id: "beach-marker-halo",
         type: "circle",
         source: "beach-markers",
+        layout: {
+          visibility: initialBeachMarkerVisibility,
+        },
         paint: {
           "circle-color": "#ffffff",
           "circle-opacity": 0.94,
@@ -2156,6 +2176,7 @@ function NavigationApp() {
         type: "symbol",
         source: "beach-markers",
         layout: {
+          visibility: initialBeachMarkerVisibility,
           "icon-image": "beach-icon",
           "icon-size": [
             "case",
@@ -2177,6 +2198,7 @@ function NavigationApp() {
         source: "beach-markers",
         minzoom: 13,
         layout: {
+          visibility: initialBeachMarkerVisibility,
           "text-field": ["get", "name"],
           "text-size": 11,
           "text-offset": [0, 1.15],
@@ -2194,7 +2216,7 @@ function NavigationApp() {
         id: "harbor-marker-halo",
         type: "circle",
         source: "harbors",
-        layout: { visibility: "none" },
+        layout: { visibility: initialHarborMarkerVisibility },
         paint: {
           "circle-color": "#ffffff",
           "circle-opacity": 0.96,
@@ -2223,7 +2245,7 @@ function NavigationApp() {
         type: "symbol",
         source: "harbors",
         layout: {
-          visibility: "none",
+          visibility: initialHarborMarkerVisibility,
           "icon-image": "harbor-icon",
           "icon-size": [
             "case",

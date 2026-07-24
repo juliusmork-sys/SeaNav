@@ -4,7 +4,7 @@ import {
   selectBeachesInBbox,
   upsertBeaches,
   type BeachRow,
-} from "./_lib/db";
+} from "./_lib/db.js";
 
 type ApiRequest = {
   query: Record<string, string | string[] | undefined>;

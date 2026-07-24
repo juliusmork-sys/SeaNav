@@ -1,6 +1,6 @@
-import { ingestHarbors } from "./harbors";
-import { ingestBeaches } from "./beaches";
-import { isDbConfigured } from "./_lib/db";
+import { ingestHarbors } from "./harbors.js";
+import { ingestBeaches } from "./beaches.js";
+import { isDbConfigured } from "./_lib/db.js";
 
 type ApiRequest = {
   headers: Record<string, string | string[] | undefined>;

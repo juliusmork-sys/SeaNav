@@ -5,7 +5,7 @@ import {
   upsertHarbors,
   type BoundingBox,
   type HarborRow,
-} from "./_lib/db";
+} from "./_lib/db.js";
 
 type ApiRequest = {
   query: Record<string, string | string[] | undefined>;

@@ -61,21 +61,47 @@ function bboxForRadius(latitude: number, longitude: number, radiusMeters: number
   };
 }
 
+// OpenSeaMap koder fasiliteter i en ;-separert liste, f.eks.
+// seamark:small_craft_facility:category="electricity;water_tap;toilets;showers".
+const SEAMARK_AMENITY_MAP: Record<string, string> = {
+  electricity: "power",
+  water_tap: "water",
+  toilets: "toilets",
+  showers: "shower",
+  "pump-out": "sewage",
+  fuel_station: "fuel",
+};
+
 function getAmenities(tags: Record<string, string>) {
-  const values: string[] = [];
-  if (tags.electricity === "yes") values.push("power");
-  if (tags.water === "yes" || tags["drinking_water"] === "yes") values.push("water");
-  if (tags.toilets === "yes") values.push("toilets");
-  if (tags.shower === "yes") values.push("shower");
+  const values = new Set<string>();
+  if (tags.electricity === "yes") values.add("power");
+  if (tags.water === "yes" || tags["drinking_water"] === "yes") values.add("water");
+  if (tags.toilets === "yes") values.add("toilets");
+  if (tags.shower === "yes") values.add("shower");
   if (tags.sewage === "yes" || tags["sewage:disposal"] === "yes") {
-    values.push("sewage");
+    values.add("sewage");
   }
-  if (tags.fuel === "yes" || tags["fuel:diesel"] === "yes") values.push("fuel");
-  return values;
+  if (tags.fuel === "yes" || tags["fuel:diesel"] === "yes") values.add("fuel");
+
+  const seamarkCategory =
+    tags["seamark:small_craft_facility:category"] ??
+    tags["seamark:harbour:category"];
+  if (seamarkCategory) {
+    for (const raw of seamarkCategory.split(";")) {
+      const mapped = SEAMARK_AMENITY_MAP[raw.trim()];
+      if (mapped) values.add(mapped);
+    }
+  }
+  return [...values];
 }
 
 function normalizeHarborType(tags: Record<string, string>) {
   if (tags.leisure === "marina") return "marina";
+  // OpenSeaMap: seamark:harbour:category=marina/marina_no_facilities, og
+  // seamark:type=small_craft_facility er begge marina-lignende småbåthavner.
+  const seamarkHarbour = tags["seamark:harbour:category"];
+  if (seamarkHarbour && seamarkHarbour.includes("marina")) return "marina";
+  if (tags["seamark:type"] === "small_craft_facility") return "marina";
   const harbour = tags.harbour;
   // OSM bruker ofte harbour=yes; behandle som generisk havn.
   if (harbour && harbour !== "no") return "harbour";
@@ -227,7 +253,7 @@ export async function fetchAllNorwayHarbors(): Promise<HarborRow[]> {
     const results = await Promise.allSettled(
       batch.map((tile) => {
         const box = `${tile.south},${tile.west},${tile.north},${tile.east}`;
-        const query = `[out:json][timeout:25];(nwr["leisure"="marina"](${box});nwr["harbour"](${box});nwr["seamark:type"="harbour"](${box}););out center tags;`;
+        const query = `[out:json][timeout:25];(nwr["leisure"="marina"](${box});nwr["harbour"](${box});nwr["seamark:type"="harbour"](${box});nwr["seamark:type"="small_craft_facility"](${box}););out center tags;`;
         return runOverpass(query, TILE_TIMEOUT_MS, seen, INGEST_MAX_ENDPOINTS);
       }),
     );

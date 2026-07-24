@@ -225,10 +225,9 @@ const UI_TEXT = {
         ],
       },
     ],
-    unlockNorth: "Lås opp nord opp",
-    fixNorth: "Lås nord opp",
+    unlockNorth: "Fri retning",
+    fixNorth: "Lås til nord",
     returnToLocation: "Gå til GPS-posisjon",
-    fixNorthLabel: "Nord opp",
     myLocation: "Min posisjon",
     settings: "Innstillinger",
     showDisplayOptions: "Vis innstillinger",
@@ -443,10 +442,9 @@ const UI_TEXT = {
         ],
       },
     ],
-    unlockNorth: "Unlock north-up",
-    fixNorth: "Fix north-up",
+    unlockNorth: "Free rotation",
+    fixNorth: "Lock to north",
     returnToLocation: "Return to GPS location",
-    fixNorthLabel: "Fix north",
     myLocation: "My location",
     settings: "Settings",
     showDisplayOptions: "Show display options",
@@ -1656,7 +1654,7 @@ function NavigationApp() {
   const [tracking, setTracking] = useState(false);
   const [gpsRestarting, setGpsRestarting] = useState(false);
   const [followingLocation, setFollowingLocation] = useState(true);
-  const [northUp, setNorthUp] = useState(false);
+  const [northUp, setNorthUp] = useState(true);
   const [mapBearing, setMapBearing] = useState(0);
   const [chartVisible, setChartVisible] = useState(true);
   const [harborsVisible, setHarborsVisible] = useState(false);
@@ -3277,7 +3275,13 @@ function NavigationApp() {
             ) : (
               <LocateFixed size={20} />
             )}
-            <span>{followingLocation ? text.fixNorthLabel : text.myLocation}</span>
+            <span>
+              {followingLocation
+                ? northUp
+                  ? text.unlockNorth
+                  : text.fixNorth
+                : text.myLocation}
+            </span>
           </button>
 
           <div className="panel-actions">

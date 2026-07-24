@@ -19,7 +19,7 @@ type OverpassElement = {
 
 const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
 const DEFAULT_RADIUS_METERS = 2000;
-const MAX_RADIUS_METERS = 5000;
+const MAX_RADIUS_METERS = 10000;
 
 function parseNumber(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;

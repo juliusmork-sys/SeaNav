@@ -56,7 +56,7 @@ type NearestBeach = {
 const BEACH_ENDPOINT =
   "https://testarcgis02.miljodirektoratet.no/arcgis/rest/services/Badeplasser/Badeplasser_status/MapServer/1/query";
 const DEFAULT_RADIUS_METERS = 2000;
-const MAX_RADIUS_METERS = 5000;
+const MAX_RADIUS_METERS = 10000;
 
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 

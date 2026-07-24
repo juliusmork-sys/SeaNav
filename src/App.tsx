@@ -864,10 +864,30 @@ function getBeachSearchRadius(map: Map) {
     northEast.lng,
   );
 
-  return Math.round(Math.min(5000, Math.max(1500, radiusMeters)));
+  // Dekk hele synlig kartutsnitt (sentrum→hjørne), ikke bare en liten
+  // boble rundt sentrum — ellers dukker havner/strender utenfor bobla ikke
+  // opp. Cap holder Overpass-spørringen håndterbar.
+  return Math.round(Math.min(10000, Math.max(1500, radiusMeters)));
 }
 
-function createBeachIconImageData() {
+// Ikon-geometri som SVG path-data (24x24 viewBox), delt mellom kartmarkør
+// (rasterisert via Path2D) og popup-tittel (inline SVG) så de er identiske.
+const HARBOR_ICON_PATHS = [
+  "M9 5a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+  "M12 22V8",
+  "M5 12H2a10 10 0 0 0 20 0h-3",
+];
+const BEACH_ICON_PATHS = [
+  "M17.553 16.75a7.5 7.5 0 0 0 -10.606 0",
+  "M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196z",
+  "M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196",
+  "M15 9l-3 5.196",
+  "M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 1 -.25",
+];
+
+// Tegn hvit bakgrunnssirkel + ikon (SVG-paths) sentrert. Path2D gir eksakt
+// samme geometri som Lucide/Tabler-ikonene.
+function createMarkerIconImageData(paths: string[], strokeColor: string) {
   const size = 64;
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -887,41 +907,22 @@ function createBeachIconImageData() {
   context.fill();
   context.stroke();
 
-  context.strokeStyle = "#ea580c";
-  context.lineWidth = 4.8;
-  context.beginPath();
-  context.arc(32, 29, 15, Math.PI * 1.04, Math.PI * 1.96);
-  context.stroke();
-
-  context.fillStyle = "#f97316";
-  context.beginPath();
-  context.moveTo(17, 29);
-  context.quadraticCurveTo(22, 18, 32, 15);
-  context.quadraticCurveTo(42, 18, 47, 29);
-  context.lineTo(41, 27);
-  context.lineTo(35, 30);
-  context.lineTo(29, 27);
-  context.lineTo(23, 30);
-  context.closePath();
-  context.fill();
-
-  context.strokeStyle = "#9a3412";
-  context.lineWidth = 3.2;
-  context.beginPath();
-  context.moveTo(32, 16);
-  context.lineTo(28, 43);
-  context.stroke();
-
-  context.strokeStyle = "#ea580c";
-  context.lineWidth = 3.2;
-  context.beginPath();
-  context.moveTo(18, 43);
-  context.quadraticCurveTo(23, 38, 28, 43);
-  context.quadraticCurveTo(33, 48, 38, 43);
-  context.quadraticCurveTo(43, 38, 48, 43);
-  context.stroke();
+  const scale = 1.5;
+  context.save();
+  context.translate(32 - 12 * scale, 32 - 12 * scale);
+  context.scale(scale, scale);
+  context.strokeStyle = strokeColor;
+  context.lineWidth = 2;
+  for (const definition of paths) {
+    context.stroke(new Path2D(definition));
+  }
+  context.restore();
 
   return context.getImageData(0, 0, size, size);
+}
+
+function createBeachIconImageData() {
+  return createMarkerIconImageData(BEACH_ICON_PATHS, "#ea580c");
 }
 
 function createBeachAreaPatternImageData() {
@@ -946,56 +947,7 @@ function createBeachAreaPatternImageData() {
 }
 
 function createHarborIconImageData() {
-  const size = 64;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-
-  context.clearRect(0, 0, size, size);
-  context.lineCap = "round";
-  context.lineJoin = "round";
-
-  // Hvit bakgrunnssirkel så markøren er synlig over alle basiskart.
-  context.fillStyle = "rgba(255, 255, 255, 0.96)";
-  context.strokeStyle = "rgba(31, 41, 55, 0.22)";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.arc(32, 32, 25, 0, Math.PI * 2);
-  context.fill();
-  context.stroke();
-
-  // Tegn lucide "anchor" (24x24 viewBox), sentrert i sirkelen — samme ikon
-  // som kartlag-knappen bruker.
-  const scale = 1.7;
-  context.save();
-  context.translate(32 - 12 * scale, 32 - 12 * scale);
-  context.scale(scale, scale);
-  context.strokeStyle = "#007590";
-  context.lineWidth = 2.1;
-
-  // circle cx=12 cy=5 r=3
-  context.beginPath();
-  context.arc(12, 5, 3, 0, Math.PI * 2);
-  context.stroke();
-
-  // M12 22 V8  (skaftet)
-  context.beginPath();
-  context.moveTo(12, 22);
-  context.lineTo(12, 8);
-  context.stroke();
-
-  // M5 12 H2 a10 10 0 0 0 20 0 h-3  (bunnbuen med stubber)
-  context.beginPath();
-  context.moveTo(5, 12);
-  context.lineTo(2, 12);
-  context.arc(12, 12, 10, Math.PI, Math.PI * 2);
-  context.lineTo(19, 12);
-  context.stroke();
-  context.restore();
-
-  return context.getImageData(0, 0, size, size);
+  return createMarkerIconImageData(HARBOR_ICON_PATHS, "#007590");
 }
 
 function getBeachFeatureName(
@@ -1185,8 +1137,11 @@ function HarborPopupContent({
 }
 
 // Tabler "beach"-ikon (parasoll + bølger). Lucide mangler en badeplass-
-// parasoll, så vi inliner denne. currentColor arves fra popup-aksenten.
-const BEACH_ICON_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.553 16.75a7.5 7.5 0 0 0 -10.606 0" /><path d="M18 3.804a6 6 0 0 0 -8.196 2.196l10.392 6a6 6 0 0 0 -2.196 -8.196z" /><path d="M16.732 10c1.658 -2.87 2.225 -5.644 1.268 -6.196c-.957 -.552 -3.075 1.326 -4.732 4.196" /><path d="M15 9l-3 5.196" /><path d="M3 19.25a2.4 2.4 0 0 1 1 -.25a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 1 -.25" /></svg>`;
+// parasoll, så vi inliner denne. Bygges fra samme path-data som markøren.
+// currentColor arves fra popup-aksenten.
+const BEACH_ICON_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BEACH_ICON_PATHS.map(
+  (definition) => `<path d="${definition}" />`,
+).join("")}</svg>`;
 
 function escapePopupText(value: string) {
   return value.replace(/[&<>"']/g, (character) => {
@@ -1982,7 +1937,7 @@ function NavigationApp() {
               nearest: updateNearest ? null : current.nearest,
             }));
           });
-      }, 450);
+      }, 300);
     },
     [beachesVisible],
   );
@@ -2027,7 +1982,7 @@ function NavigationApp() {
             if (harborMapQueryRef.current?.timestamp !== requestedAt) return;
             setHarbors((current) => ({ ...current, status: "error" }));
           });
-      }, 500);
+      }, 300);
     },
     [],
   );
@@ -2113,6 +2068,7 @@ function NavigationApp() {
         type: "geojson",
         data: EMPTY_HARBOR_FEATURE_COLLECTION,
         attribution: "Harbours: OpenStreetMap contributors",
+        promoteId: "id",
       });
       map.addSource("beaches", {
         type: "geojson",
@@ -2121,6 +2077,7 @@ function NavigationApp() {
       map.addSource("beach-markers", {
         type: "geojson",
         data: EMPTY_FEATURE_COLLECTION,
+        promoteId: "id",
       });
       map.addLayer({
         id: "beach-area-fill",
@@ -2175,16 +2132,23 @@ function NavigationApp() {
           "circle-color": "#ffffff",
           "circle-opacity": 0.94,
           "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            9,
-            8,
-            14,
-            11,
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            ["interpolate", ["linear"], ["zoom"], 9, 12, 14, 16],
+            ["interpolate", ["linear"], ["zoom"], 9, 8, 14, 11],
           ],
-          "circle-stroke-color": "rgba(31, 41, 55, 0.28)",
-          "circle-stroke-width": 1,
+          "circle-stroke-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#ea580c",
+            "rgba(31, 41, 55, 0.28)",
+          ],
+          "circle-stroke-width": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            3,
+            1,
+          ],
         },
       });
       map.addLayer({
@@ -2194,13 +2158,10 @@ function NavigationApp() {
         layout: {
           "icon-image": "beach-icon",
           "icon-size": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            9,
-            0.5,
-            14,
-            0.68,
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            ["interpolate", ["linear"], ["zoom"], 9, 0.72, 14, 0.95],
+            ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 0.68],
           ],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -2237,9 +2198,24 @@ function NavigationApp() {
         paint: {
           "circle-color": "#ffffff",
           "circle-opacity": 0.96,
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 8, 14, 11],
-          "circle-stroke-color": "rgba(31, 41, 55, 0.28)",
-          "circle-stroke-width": 1,
+          "circle-radius": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            ["interpolate", ["linear"], ["zoom"], 9, 12, 14, 16],
+            ["interpolate", ["linear"], ["zoom"], 9, 8, 14, 11],
+          ],
+          "circle-stroke-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#007590",
+            "rgba(31, 41, 55, 0.28)",
+          ],
+          "circle-stroke-width": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            3,
+            1,
+          ],
         },
       });
       map.addLayer({
@@ -2249,7 +2225,12 @@ function NavigationApp() {
         layout: {
           visibility: "none",
           "icon-image": "harbor-icon",
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 0.68],
+          "icon-size": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            ["interpolate", ["linear"], ["zoom"], 9, 0.72, 14, 0.95],
+            ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 0.68],
+          ],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "icon-anchor": "center",
@@ -2263,12 +2244,27 @@ function NavigationApp() {
         "beach-area-hatch",
         "beach-area-outline",
       ];
+      // Fremhev valgt markør (større disk + tykkere omriss) via feature-state.
+      let selectedMarker: { source: string; id: string | number } | null = null;
+      const clearSelectedMarker = () => {
+        if (selectedMarker) {
+          map.setFeatureState(selectedMarker, { selected: false });
+          selectedMarker = null;
+        }
+      };
+      const selectMarker = (feature: maplibregl.MapGeoJSONFeature) => {
+        clearSelectedMarker();
+        if (feature.id === undefined || feature.id === null) return;
+        selectedMarker = { source: feature.source, id: feature.id };
+        map.setFeatureState(selectedMarker, { selected: true });
+      };
+
       const showBeachPopup = (event: maplibregl.MapLayerMouseEvent) => {
         const feature = event.features?.[0];
         if (!feature) return;
 
         const name = getBeachFeatureName(feature.properties);
-        new maplibregl.Popup({
+        const popup = new maplibregl.Popup({
           closeButton: true,
           closeOnClick: true,
           offset: 16,
@@ -2279,6 +2275,9 @@ function NavigationApp() {
             `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span></div>`,
           )
           .addTo(map);
+
+        selectMarker(feature);
+        popup.on("close", clearSelectedMarker);
       };
       const showPointer = () => {
         map.getCanvas().style.cursor = "pointer";
@@ -2293,8 +2292,9 @@ function NavigationApp() {
         map.on("mouseleave", layerId, hidePointer);
       });
       const showHarborPopup = (event: maplibregl.MapLayerMouseEvent) => {
-        const harbor = getHarborFromProperties(event.features?.[0]?.properties);
-        if (!harbor) return;
+        const feature = event.features?.[0];
+        const harbor = getHarborFromProperties(feature?.properties);
+        if (!harbor || !feature) return;
 
         const container = document.createElement("div");
         const root = createRoot(container);
@@ -2317,8 +2317,11 @@ function NavigationApp() {
           .setDOMContent(container)
           .addTo(map);
 
+        selectMarker(feature);
+
         // Utsett unmount til maplibre er ferdig med å fjerne DOM-noden.
         popup.on("close", () => {
+          clearSelectedMarker();
           window.setTimeout(() => root.unmount(), 0);
         });
       };

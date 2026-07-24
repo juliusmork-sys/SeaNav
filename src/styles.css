@@ -4840,7 +4840,13 @@ button {
   color: #18323c;
 }
 
-.harbor-type-badge {
+.popup-card {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.popup-type-badge {
   justify-self: start;
   padding: 2px 9px;
   border-radius: 999px;

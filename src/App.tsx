@@ -342,8 +342,9 @@ const UI_TEXT = {
     harborHours: "Åpningstider",
     harborPhone: "Telefon",
     harborWebsite: "Nettside",
-    harborTypeMarina: "Gjestehavn",
+    harborTypeMarina: "Marina",
     harborTypeHarbour: "Havn",
+    beachBadge: "Badeplass",
     harborOpenAllHours: "Åpent hele døgnet",
     harborCapacityUnit: (count: number) => `${count} båtplasser`,
     amenityLabels: {
@@ -561,6 +562,7 @@ const UI_TEXT = {
     harborWebsite: "Website",
     harborTypeMarina: "Marina",
     harborTypeHarbour: "Harbour",
+    beachBadge: "Bathing spot",
     harborOpenAllHours: "Open around the clock",
     harborCapacityUnit: (count: number) => `${count} berths`,
     amenityLabels: {
@@ -1057,11 +1059,28 @@ function harborTypeLabel(type: string | null, text: UiText) {
   return null;
 }
 
-function humanizeOpeningHours(raw: string, text: UiText) {
-  const value = raw.trim();
+const OSM_DAY_LABELS_NO: Record<string, string> = {
+  Mo: "Ma",
+  Tu: "Ti",
+  We: "On",
+  Th: "To",
+  Fr: "Fr",
+  Sa: "Lø",
+  Su: "Sø",
+};
+
+function humanizeOpeningHours(raw: string, text: UiText, language: Language) {
+  let value = raw.trim();
   // Vanligste OSM-mønstre for døgnåpent; ellers vis rå streng.
   if (/^(24\/7|(mo-su\s*)?00:00-24:00)$/i.test(value)) {
     return text.harborOpenAllHours;
+  }
+  // Oversett OSM-dagskoder (Mo, Tu, ...) til norske forkortelser.
+  if (language === "no") {
+    value = value.replace(
+      /\b(Mo|Tu|We|Th|Fr|Sa|Su)\b/g,
+      (day) => OSM_DAY_LABELS_NO[day] ?? day,
+    );
   }
   return value;
 }
@@ -1075,10 +1094,12 @@ function normalizeCapacity(raw: string, text: UiText) {
 function HarborPopupContent({
   harbor,
   text,
+  language,
   onOpenMaps,
 }: {
   harbor: Harbor;
   text: UiText;
+  language: Language;
   onOpenMaps: () => void;
 }) {
   const typeLabel = harborTypeLabel(harbor.type, text);
@@ -1086,7 +1107,7 @@ function HarborPopupContent({
     ? normalizeCapacity(harbor.capacity, text)
     : null;
   const hours = harbor.openingHours
-    ? humanizeOpeningHours(harbor.openingHours, text)
+    ? humanizeOpeningHours(harbor.openingHours, text, language)
     : null;
   const amenities = harbor.amenities.filter(
     (key): key is AmenityKey => key in AMENITY_ICONS,
@@ -1096,7 +1117,7 @@ function HarborPopupContent({
   return (
     <div className="harbor-popup-content">
       <strong>{harbor.name}</strong>
-      {typeLabel && <span className="harbor-type-badge">{typeLabel}</span>}
+      {typeLabel && <span className="popup-type-badge">{typeLabel}</span>}
       {hasMeta && (
         <div className="harbor-meta">
           {capacity && (
@@ -2243,11 +2264,13 @@ function NavigationApp() {
         new maplibregl.Popup({
           closeButton: true,
           closeOnClick: true,
-          offset: 14,
+          offset: 16,
           className: "beach-popup",
         })
           .setLngLat(event.lngLat)
-          .setHTML(`<strong>${escapePopupText(name)}</strong>`)
+          .setHTML(
+            `<div class="popup-card"><strong>${escapePopupText(name)}</strong><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span></div>`,
+          )
           .addTo(map);
       };
       const showPointer = () => {
@@ -2272,6 +2295,7 @@ function NavigationApp() {
           <HarborPopupContent
             harbor={harbor}
             text={text}
+            language={language}
             onOpenMaps={() => setHarborMapOpen(harbor)}
           />,
         );

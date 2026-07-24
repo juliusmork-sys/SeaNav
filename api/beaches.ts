@@ -1,3 +1,11 @@
+import {
+  ensureSchema,
+  isDbConfigured,
+  selectBeachesInBbox,
+  upsertBeaches,
+  type BeachRow,
+} from "./_lib/db";
+
 type ApiRequest = {
   query: Record<string, string | string[] | undefined>;
 };
@@ -356,6 +364,85 @@ function getString(value: unknown) {
   return null;
 }
 
+const BEACH_OUT_FIELDS =
+  "OBJECTID,Navn,Tilstand,Tilstandkommentar,Overvaking_badevannskvalitet,Kommunenavn,Kommunenr,Fylke";
+
+// Konverter ArcGIS-feature til en DB-rad (sentroide for bbox-filter,
+// full geometri lagres som jsonb).
+function beachFeatureToRow(feature: BeachFeature): BeachRow | null {
+  const center = geometryCenter(feature.geometry);
+  if (!center || !feature.geometry) return null;
+
+  const properties = feature.properties ?? {};
+  const id = feature.id ?? getString(properties.OBJECTID);
+  if (id === undefined || id === null) return null;
+
+  return {
+    id: String(id),
+    name: getString(properties.Navn) ?? "Badeplass",
+    lat: center[1],
+    lon: center[0],
+    municipality: getString(properties.Kommunenavn),
+    waterQuality: getString(properties.Tilstand),
+    monitored: getString(properties.Overvaking_badevannskvalitet),
+    geometry: feature.geometry,
+  };
+}
+
+// Rekonstruer ArcGIS-lignende feature fra DB-rad, slik at findNearestBeach og
+// createBeachMarkers virker uendret.
+function rowToBeachFeature(row: BeachRow): BeachFeature {
+  return {
+    type: "Feature",
+    id: row.id,
+    geometry: row.geometry as Geometry,
+    properties: {
+      OBJECTID: row.id,
+      Navn: row.name,
+      Kommunenavn: row.municipality,
+      Tilstand: row.waterQuality,
+      Overvaking_badevannskvalitet: row.monitored,
+    },
+  };
+}
+
+// Full ingest: alle registrerte badeplasser (paginert), brukt av cron.
+async function fetchAllBeaches(): Promise<BeachFeature[]> {
+  const pageSize = 1000;
+  const all: BeachFeature[] = [];
+  for (let offset = 0; offset <= 40000; offset += pageSize) {
+    const params = new URLSearchParams({
+      f: "geojson",
+      where: "1=1",
+      outFields: BEACH_OUT_FIELDS,
+      returnGeometry: "true",
+      outSR: "4326",
+      resultRecordCount: String(pageSize),
+      resultOffset: String(offset),
+    });
+    const response = await fetch(`${BEACH_ENDPOINT}?${params.toString()}`, {
+      headers: { accept: "application/geo+json, application/json" },
+    });
+    if (!response.ok) throw new Error(`ArcGIS returned ${response.status}`);
+    const collection = (await response.json()) as BeachFeatureCollection;
+    const features = Array.isArray(collection.features)
+      ? collection.features
+      : [];
+    all.push(...features);
+    if (features.length < pageSize) break;
+  }
+  return all;
+}
+
+export async function ingestBeaches(): Promise<number> {
+  await ensureSchema();
+  const features = await fetchAllBeaches();
+  const rows = features
+    .map(beachFeatureToRow)
+    .filter((row): row is BeachRow => row !== null);
+  return upsertBeaches(rows);
+}
+
 function findNearestBeach(
   collection: BeachFeatureCollection,
   latitude: number,
@@ -436,6 +523,35 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   ) {
     response.status(400).json({ error: "Expected numeric lat and lon query parameters." });
     return;
+  }
+
+  // Egen DB først; tom (område uten badeplasser eller før første ingest) => live.
+  if (isDbConfigured) {
+    try {
+      const bbox = bboxForRadius(latitude, longitude, radiusMeters);
+      const rows = await selectBeachesInBbox(bbox);
+      if (rows.length > 0) {
+        const safeCollection: BeachFeatureCollection = {
+          type: "FeatureCollection",
+          features: rows.map(rowToBeachFeature),
+        };
+        response.status(200).json({
+          source: "SeaNav cache (Miljødirektoratet registrerte badeplasser)",
+          radiusMeters,
+          nearest: findNearestBeach(
+            safeCollection,
+            latitude,
+            longitude,
+            radiusMeters,
+          ),
+          featureCollection: safeCollection,
+          markerFeatureCollection: createBeachMarkers(safeCollection),
+        });
+        return;
+      }
+    } catch {
+      // Faller tilbake til live-API under.
+    }
   }
 
   try {

@@ -8,6 +8,8 @@ import {
   CloudSun,
   Compass,
   Crosshair,
+  Download,
+  Share,
   ExternalLink,
   HeartHandshake,
   Layers,
@@ -1259,7 +1261,69 @@ async function fetchNearbyHarbors(
   return payload.featureCollection ?? EMPTY_HARBOR_FEATURE_COLLECTION;
 }
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+// Kan ikke tvinge installasjon — nettleseren eier gesten. Vi fanger
+// beforeinstallprompt (Android/Chromium) og viser egen knapp; iOS Safari
+// sender ikke eventet, så der viser vi manuell instruksjon i stedet.
+function useInstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+        true;
+    setInstalled(standalone);
+
+    const ua = window.navigator.userAgent;
+    setIsIos(/iPad|iPhone|iPod/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua));
+
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const promptInstall = useCallback(async () => {
+    if (!deferredPrompt) return;
+    await deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  }, [deferredPrompt]);
+
+  return {
+    installed,
+    canInstall: deferredPrompt !== null,
+    isIos,
+    promptInstall,
+  };
+}
+
 function LandingPage({ onStart }: { onStart: () => void }) {
+  const { installed, canInstall, isIos, promptInstall } = useInstallPrompt();
+  const [showIosHint, setShowIosHint] = useState(false);
+  const showInstall = !installed && (canInstall || isIos);
+
   return (
     <main className="landing-page">
       <section className="landing-hero">
@@ -1296,7 +1360,29 @@ function LandingPage({ onStart }: { onStart: () => void }) {
               Start gratis navigering
               <ArrowRight size={19} />
             </button>
+            {showInstall && (
+              <button
+                className="landing-install-cta"
+                type="button"
+                onClick={
+                  canInstall ? promptInstall : () => setShowIosHint((v) => !v)
+                }
+              >
+                {isIos && !canInstall ? (
+                  <Share size={18} />
+                ) : (
+                  <Download size={18} />
+                )}
+                Installer som app
+              </button>
+            )}
             <span>Gratis å bruke. Rett i nettleseren.</span>
+            {showIosHint && isIos && !canInstall && (
+              <p className="landing-install-hint">
+                Trykk <strong>Del</strong>-knappen nederst i Safari og velg{" "}
+                <strong>«Legg til på Hjem-skjerm»</strong>.
+              </p>
+            )}
           </div>
         </div>
 
@@ -1528,15 +1614,6 @@ function NavigationApp() {
 
     const updateMobileChromeOffset = () => {
       const viewport = window.visualViewport;
-      const userAgent = window.navigator.userAgent;
-      const platform = window.navigator.platform;
-      const maxTouchPoints = window.navigator.maxTouchPoints ?? 0;
-      const isIos =
-        /iPad|iPhone|iPod/.test(userAgent) ||
-        (platform === "MacIntel" && maxTouchPoints > 1);
-      const isAndroid = /Android/.test(userAgent);
-      const isPortrait = window.matchMedia("(orientation: portrait)").matches;
-      const isCompactWidth = window.matchMedia("(max-width: 820px)").matches;
 
       const measuredCoveredBottom = viewport
         ? Math.max(
@@ -1544,18 +1621,6 @@ function NavigationApp() {
             window.innerHeight - viewport.height - viewport.offsetTop,
           )
         : 0;
-      const platformBottomClearance =
-        isPortrait && isCompactWidth
-          ? isIos
-            ? 34
-            : isAndroid
-              ? 28
-              : 18
-          : 0;
-      const panelBottomClearance = Math.max(
-        measuredCoveredBottom,
-        platformBottomClearance,
-      );
 
       document.documentElement.style.setProperty(
         "--mobile-browser-bottom-offset",
@@ -1563,7 +1628,7 @@ function NavigationApp() {
       );
       document.documentElement.style.setProperty(
         "--mobile-panel-bottom-clearance",
-        `${Math.round(panelBottomClearance)}px`,
+        `${Math.round(measuredCoveredBottom)}px`,
       );
     };
 

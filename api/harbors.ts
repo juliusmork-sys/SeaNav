@@ -43,15 +43,24 @@ function bboxForRadius(latitude: number, longitude: number, radiusMeters: number
 
 function getAmenities(tags: Record<string, string>) {
   const values: string[] = [];
-  if (tags.electricity === "yes") values.push("Strøm");
-  if (tags.water === "yes" || tags["drinking_water"] === "yes") values.push("Vann");
-  if (tags.toilets === "yes") values.push("Toalett");
-  if (tags.shower === "yes") values.push("Dusj");
+  if (tags.electricity === "yes") values.push("power");
+  if (tags.water === "yes" || tags["drinking_water"] === "yes") values.push("water");
+  if (tags.toilets === "yes") values.push("toilets");
+  if (tags.shower === "yes") values.push("shower");
   if (tags.sewage === "yes" || tags["sewage:disposal"] === "yes") {
-    values.push("Tømming");
+    values.push("sewage");
   }
-  if (tags.fuel === "yes" || tags["fuel:diesel"] === "yes") values.push("Drivstoff");
+  if (tags.fuel === "yes" || tags["fuel:diesel"] === "yes") values.push("fuel");
   return values;
+}
+
+function normalizeHarborType(tags: Record<string, string>) {
+  if (tags.leisure === "marina") return "marina";
+  const harbour = tags.harbour;
+  // OSM bruker ofte harbour=yes; behandle som generisk havn.
+  if (harbour && harbour !== "no") return "harbour";
+  if (tags["seamark:type"] === "harbour") return "harbour";
+  return null;
 }
 
 function normalizeWebsite(tags: Record<string, string>) {
@@ -121,11 +130,11 @@ export default async function handler(request: ApiRequest, response: ApiResponse
           name: tags.name,
           latitude: point.lat,
           longitude: point.lon,
-          type: tags.harbour ?? (tags.leisure === "marina" ? "Marina" : null),
+          type: normalizeHarborType(tags),
           website: normalizeWebsite(tags),
           phone: tags.phone ?? tags["contact:phone"] ?? null,
           openingHours: tags.opening_hours ?? null,
-          capacity: tags.capacity ?? tags.mooring ?? null,
+          capacity: tags.capacity ?? null,
           amenities: getAmenities(tags),
         },
       }];

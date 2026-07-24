@@ -1,27 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentType } from "react";
+import { createRoot } from "react-dom/client";
 import maplibregl, { Map } from "maplibre-gl";
 import {
   ArrowRight,
   Anchor,
   BookOpen,
   CircleDollarSign,
+  Clock,
   CloudSun,
   Compass,
   Crosshair,
   Download,
-  Share,
+  Droplet,
   ExternalLink,
+  Fuel,
+  Globe,
   HeartHandshake,
   Layers,
   LocateFixed,
   Map as MapIcon,
+  MapPin,
+  Phone,
+  Recycle,
+  Sailboat,
   Satellite,
+  Share,
   ShieldAlert,
+  ShowerHead,
   SlidersHorizontal,
+  Toilet,
   UserRoundX,
   Wind,
   X,
   Waves,
+  Zap,
 } from "lucide-react";
 
 type PositionFix = {
@@ -329,6 +342,18 @@ const UI_TEXT = {
     harborHours: "Åpningstider",
     harborPhone: "Telefon",
     harborWebsite: "Nettside",
+    harborTypeMarina: "Gjestehavn",
+    harborTypeHarbour: "Havn",
+    harborOpenAllHours: "Åpent hele døgnet",
+    harborCapacityUnit: (count: number) => `${count} båtplasser`,
+    amenityLabels: {
+      power: "Strøm",
+      water: "Vann",
+      toilets: "Toalett",
+      shower: "Dusj",
+      sewage: "Tømming",
+      fuel: "Drivstoff",
+    },
     openGoogleMaps: "Åpne i Google Maps",
     closeMap: "Lukk kart",
     coordinates: "Koordinater",
@@ -534,6 +559,18 @@ const UI_TEXT = {
     harborHours: "Opening hours",
     harborPhone: "Phone",
     harborWebsite: "Website",
+    harborTypeMarina: "Marina",
+    harborTypeHarbour: "Harbour",
+    harborOpenAllHours: "Open around the clock",
+    harborCapacityUnit: (count: number) => `${count} berths`,
+    amenityLabels: {
+      power: "Power",
+      water: "Water",
+      toilets: "Toilets",
+      shower: "Shower",
+      sewage: "Pump-out",
+      fuel: "Fuel",
+    },
     openGoogleMaps: "Open in Google Maps",
     closeMap: "Close map",
     coordinates: "Coordinates",
@@ -915,26 +952,36 @@ function createHarborIconImageData() {
   if (!context) return null;
 
   context.clearRect(0, 0, size, size);
-  context.fillStyle = "rgba(255, 255, 255, 0.96)";
-  context.strokeStyle = "rgba(31, 41, 55, 0.24)";
+
+  // Tegn lucide "anchor" (24x24 viewBox) — samme ikon som kartlag-knappen.
+  // Halo-laget under markøren gir den hvite bakgrunnssirkelen, så ikonet
+  // trenger bare selve ankeret.
+  const scale = (size / 24) * 0.72;
+  const inset = (size - 24 * scale) / 2;
+  context.translate(inset, inset);
+  context.scale(scale, scale);
+  context.strokeStyle = "#007590";
   context.lineWidth = 2;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  // circle cx=12 cy=5 r=3
   context.beginPath();
-  context.arc(32, 32, 25, 0, Math.PI * 2);
-  context.fill();
+  context.arc(12, 5, 3, 0, Math.PI * 2);
   context.stroke();
 
-  context.strokeStyle = "#007590";
-  context.lineWidth = 4;
-  context.lineCap = "round";
+  // M12 22 V8  (skaftet)
   context.beginPath();
-  context.arc(32, 37, 12, Math.PI * 0.12, Math.PI * 0.88);
-  context.moveTo(32, 16);
-  context.lineTo(32, 39);
-  context.moveTo(24, 24);
-  context.lineTo(40, 24);
-  context.moveTo(27, 18);
-  context.lineTo(32, 13);
-  context.lineTo(37, 18);
+  context.moveTo(12, 22);
+  context.lineTo(12, 8);
+  context.stroke();
+
+  // M5 12 H2 a10 10 0 0 0 20 0 h-3  (bunnbuen med stubber)
+  context.beginPath();
+  context.moveTo(5, 12);
+  context.lineTo(2, 12);
+  context.arc(12, 12, 10, Math.PI, Math.PI * 2);
+  context.lineTo(19, 12);
   context.stroke();
 
   return context.getImageData(0, 0, size, size);
@@ -950,7 +997,7 @@ function getBeachFeatureName(
 }
 
 function getHarborFromProperties(
-  properties: maplibregl.MapGeoJSONFeature["properties"],
+  properties: maplibregl.MapGeoJSONFeature["properties"] | undefined,
 ) {
   const record = properties ?? {};
   const latitude = typeof record.latitude === "number" ? record.latitude : null;
@@ -981,6 +1028,126 @@ function getHarborFromProperties(
     capacity: typeof record.capacity === "string" ? record.capacity : null,
     amenities,
   } satisfies Harbor;
+}
+
+type UiText = (typeof UI_TEXT)[Language];
+type AmenityKey = keyof UiText["amenityLabels"];
+
+const AMENITY_ICONS: Record<AmenityKey, ComponentType<{ size?: number }>> = {
+  power: Zap,
+  water: Droplet,
+  toilets: Toilet,
+  shower: ShowerHead,
+  sewage: Recycle,
+  fuel: Fuel,
+};
+
+function harborTypeLabel(type: string | null, text: UiText) {
+  if (type === "marina") return text.harborTypeMarina;
+  if (type === "harbour") return text.harborTypeHarbour;
+  return null;
+}
+
+function humanizeOpeningHours(raw: string, text: UiText) {
+  const value = raw.trim();
+  // Vanligste OSM-mønstre for døgnåpent; ellers vis rå streng.
+  if (/^(24\/7|(mo-su\s*)?00:00-24:00)$/i.test(value)) {
+    return text.harborOpenAllHours;
+  }
+  return value;
+}
+
+function normalizeCapacity(raw: string, text: UiText) {
+  const match = raw.match(/\d+/);
+  if (!match) return null;
+  return text.harborCapacityUnit(Number.parseInt(match[0], 10));
+}
+
+function HarborPopupContent({
+  harbor,
+  text,
+  onOpenMaps,
+}: {
+  harbor: Harbor;
+  text: UiText;
+  onOpenMaps: () => void;
+}) {
+  const typeLabel = harborTypeLabel(harbor.type, text);
+  const capacity = harbor.capacity
+    ? normalizeCapacity(harbor.capacity, text)
+    : null;
+  const hours = harbor.openingHours
+    ? humanizeOpeningHours(harbor.openingHours, text)
+    : null;
+  const amenities = harbor.amenities.filter(
+    (key): key is AmenityKey => key in AMENITY_ICONS,
+  );
+  const hasMeta = Boolean(capacity || hours || harbor.phone);
+
+  return (
+    <div className="harbor-popup-content">
+      <strong>{harbor.name}</strong>
+      {typeLabel && <span className="harbor-type-badge">{typeLabel}</span>}
+      {hasMeta && (
+        <div className="harbor-meta">
+          {capacity && (
+            <span className="harbor-meta-row">
+              <Sailboat size={15} />
+              {capacity}
+            </span>
+          )}
+          {hours && (
+            <span className="harbor-meta-row">
+              <Clock size={15} />
+              {hours}
+            </span>
+          )}
+          {harbor.phone && (
+            <span className="harbor-meta-row">
+              <Phone size={15} />
+              <a href={`tel:${harbor.phone.replace(/\s+/g, "")}`}>
+                {harbor.phone}
+              </a>
+            </span>
+          )}
+        </div>
+      )}
+      {amenities.length > 0 && (
+        <div className="harbor-amenities">
+          {amenities.map((key) => {
+            const Icon = AMENITY_ICONS[key];
+            return (
+              <span className="harbor-amenity" key={key}>
+                <Icon size={13} />
+                {text.amenityLabels[key]}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div className="harbor-popup-actions">
+        <button
+          type="button"
+          className="harbor-action-primary"
+          onClick={onOpenMaps}
+        >
+          <MapPin size={15} />
+          {text.openGoogleMaps}
+        </button>
+        {harbor.website && (
+          <a
+            className="harbor-action-secondary"
+            href={harbor.website}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={text.harborWebsite}
+          >
+            <Globe size={15} />
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function escapePopupText(value: string) {
@@ -2089,50 +2256,30 @@ function NavigationApp() {
         const harbor = getHarborFromProperties(event.features?.[0]?.properties);
         if (!harbor) return;
 
-        const content = document.createElement("div");
-        content.className = "harbor-popup-content";
-        const title = document.createElement("strong");
-        title.textContent = harbor.name;
-        content.appendChild(title);
-        if (harbor.type) {
-          const type = document.createElement("span");
-          type.textContent = harbor.type;
-          content.appendChild(type);
-        }
-        const metadata = [
-          harbor.capacity ? `${text.harborCapacity}: ${harbor.capacity}` : null,
-          harbor.openingHours ? `${text.harborHours}: ${harbor.openingHours}` : null,
-          harbor.phone ? `${text.harborPhone}: ${harbor.phone}` : null,
-          harbor.amenities.length > 0 ? harbor.amenities.join(" · ") : null,
-        ].filter((value): value is string => Boolean(value));
-        if (metadata.length > 0) {
-          const details = document.createElement("small");
-          details.textContent = metadata.join("\n");
-          content.appendChild(details);
-        }
-        if (harbor.website) {
-          const website = document.createElement("a");
-          website.href = harbor.website;
-          website.target = "_blank";
-          website.rel = "noreferrer";
-          website.textContent = text.harborWebsite;
-          content.appendChild(website);
-        }
-        const mapsButton = document.createElement("button");
-        mapsButton.type = "button";
-        mapsButton.textContent = text.openGoogleMaps;
-        mapsButton.addEventListener("click", () => setHarborMapOpen(harbor));
-        content.appendChild(mapsButton);
+        const container = document.createElement("div");
+        const root = createRoot(container);
+        root.render(
+          <HarborPopupContent
+            harbor={harbor}
+            text={text}
+            onOpenMaps={() => setHarborMapOpen(harbor)}
+          />,
+        );
 
-        new maplibregl.Popup({
+        const popup = new maplibregl.Popup({
           closeButton: true,
           closeOnClick: true,
-          offset: 14,
+          offset: 16,
           className: "harbor-popup",
         })
           .setLngLat(event.lngLat)
-          .setDOMContent(content)
+          .setDOMContent(container)
           .addTo(map);
+
+        // Utsett unmount til maplibre er ferdig med å fjerne DOM-noden.
+        popup.on("close", () => {
+          window.setTimeout(() => root.unmount(), 0);
+        });
       };
       map.on("click", "harbor-marker", showHarborPopup);
       map.on("mouseenter", "harbor-marker", showPointer);

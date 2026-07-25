@@ -349,6 +349,7 @@ const UI_TEXT = {
     liveNavigationData: "Navigasjonsdata",
     mapDepth: "Antatt dybde",
     distanceToLand: "Avstand til land",
+    onLand: "På land",
     latitude: "Breddegrad",
     longitude: "Lengdegrad",
     speed: "Hastighet",
@@ -630,6 +631,7 @@ const UI_TEXT = {
     liveNavigationData: "Live navigation data",
     mapDepth: "Map depth",
     distanceToLand: "Distance to land",
+    onLand: "On land",
     latitude: "Latitude",
     longitude: "Longitude",
     speed: "Speed",
@@ -1180,6 +1182,83 @@ function getBeachSearchRadius(map: Map) {
   // boble rundt sentrum — ellers dukker havner/strender utenfor bobla ikke
   // opp. Cap holder Overpass-spørringen håndterbar.
   return Math.round(Math.min(10000, Math.max(1500, radiusMeters)));
+}
+
+// Ray-cast point-in-polygon. Punkt og ring i [lng, lat].
+function pointInRing(point: [number, number], ring: number[][]) {
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersects =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(point: [number, number], rings: number[][][]) {
+  if (rings.length === 0 || !pointInRing(point, rings[0])) return false;
+  // Punkt i et hull (indre ring) teller som utenfor polygonet.
+  for (let i = 1; i < rings.length; i += 1) {
+    if (pointInRing(point, rings[i])) return false;
+  }
+  return true;
+}
+
+function pointInGeometry(point: [number, number], geometry: GeoJSON.Geometry) {
+  if (geometry.type === "Polygon") {
+    return pointInPolygon(point, geometry.coordinates as number[][][]);
+  }
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates as number[][][][]).some((polygon) =>
+      pointInPolygon(point, polygon),
+    );
+  }
+  return false;
+}
+
+// Avgjør om posisjonen ligger på land ved å slå den opp mot vann-polygonene i
+// vektorkartet (OpenMapTiles "water"-lag). Returnerer null når vi ikke kan
+// avgjøre det — kartet ikke lastet, posisjon utenfor synlig utsnitt, eller
+// vann-kilden ikke ferdiglastet — slik at forrige tilstand beholdes.
+function isPositionOnLand(
+  map: Map,
+  longitude: number,
+  latitude: number,
+): boolean | null {
+  if (!map.isStyleLoaded()) return null;
+  if (!map.getBounds().contains([longitude, latitude])) return null;
+
+  const layers = map.getStyle()?.layers ?? [];
+  const waterSources = new Set<string>();
+  for (const layer of layers) {
+    const sourceLayer = (layer as { "source-layer"?: unknown })["source-layer"];
+    const source = (layer as { source?: unknown }).source;
+    if (sourceLayer === "water" && typeof source === "string") {
+      waterSources.add(source);
+    }
+  }
+  if (waterSources.size === 0) return null;
+
+  const point: [number, number] = [longitude, latitude];
+  let sawLoadedSource = false;
+  for (const source of waterSources) {
+    if (!map.isSourceLoaded(source)) continue;
+    sawLoadedSource = true;
+    const features = map.querySourceFeatures(source, { sourceLayer: "water" });
+    for (const feature of features) {
+      if (pointInGeometry(point, feature.geometry)) {
+        return false;
+      }
+    }
+  }
+
+  // Ingen vann-polygon dekker punktet, men bare hvis kilden faktisk var lastet.
+  return sawLoadedSource ? true : null;
 }
 
 // Ikon-geometri som SVG path-data (24x24 viewBox), delt mellom kartmarkør
@@ -2032,6 +2111,7 @@ function NavigationApp() {
   const [shoreline, setShoreline] = useState<ShorelineState>(
     DEFAULT_SHORELINE_STATE,
   );
+  const [onLand, setOnLand] = useState<boolean>(false);
   const [beaches, setBeaches] = useState<BeachState>(DEFAULT_BEACH_STATE);
   const [harbors, setHarbors] = useState<HarborState>(DEFAULT_HARBOR_STATE);
   const [weather, setWeather] = useState<WeatherState>(DEFAULT_WEATHER_STATE);
@@ -2954,11 +3034,34 @@ function NavigationApp() {
   }, [fix, followingLocation]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !fix) return;
+
+    const evaluate = () => {
+      const result = isPositionOnLand(map, fix.longitude, fix.latitude);
+      if (result !== null) {
+        setOnLand(result);
+      }
+    };
+
+    evaluate();
+    map.on("idle", evaluate);
+    return () => {
+      map.off("idle", evaluate);
+    };
+  }, [fix]);
+
+  useEffect(() => {
     if (!fix) return;
     setPositionOnMap(fix);
 
     if (depthAbortRef.current) {
       window.clearTimeout(depthAbortRef.current);
+    }
+
+    if (onLand) {
+      setDepth({ status: "idle", value: null, message: text.onLand });
+      return;
     }
 
     setDepth((current) => ({
@@ -2984,13 +3087,26 @@ function NavigationApp() {
           });
         });
     }, 650);
-  }, [fix, language, setPositionOnMap, text.depthUnavailable, text.updatingEstimate]);
+  }, [
+    fix,
+    language,
+    onLand,
+    setPositionOnMap,
+    text.depthUnavailable,
+    text.onLand,
+    text.updatingEstimate,
+  ]);
 
   useEffect(() => {
     if (!fix) return;
 
     if (shorelineAbortRef.current) {
       window.clearTimeout(shorelineAbortRef.current);
+    }
+
+    if (onLand) {
+      setShoreline({ status: "idle", distanceMeters: null });
+      return;
     }
 
     setShoreline((current) => ({
@@ -3013,10 +3129,10 @@ function NavigationApp() {
           });
         });
     }, 900);
-  }, [fix]);
+  }, [fix, onLand]);
 
   useEffect(() => {
-    if (!fix || fix.heading === null) {
+    if (!fix || fix.heading === null || onLand) {
       setShallowAheadDepth(DEFAULT_DEPTH_STATE);
       return;
     }
@@ -3056,7 +3172,7 @@ function NavigationApp() {
           });
         });
     }, 950);
-  }, [fix, language, text.depthUnavailable, text.updatingEstimate]);
+  }, [fix, language, onLand, text.depthUnavailable, text.updatingEstimate]);
 
   useEffect(() => {
     if (!fix) return;
@@ -3360,7 +3476,7 @@ function NavigationApp() {
   );
 
   const marineAlert = useMemo(() => {
-    if (!showNotice) return null;
+    if (!showNotice || onLand) return null;
 
     const nearestBeach = beachesVisible ? beaches.nearest : null;
     const speedKnots = fix?.speedKnots ?? 0;
@@ -3401,6 +3517,7 @@ function NavigationApp() {
     beaches.nearest,
     beachesVisible,
     fix?.speedKnots,
+    onLand,
     shallowAheadDepth.status,
     shallowAheadDepth.value,
     showNotice,
@@ -3591,7 +3708,9 @@ function NavigationApp() {
               aria-label={text.toggleDepthUnit}
             >
               <span>{text.mapDepth}</span>
-              <strong>{formatDepth(depth.value, depthUnit)}</strong>
+              <strong>
+                {onLand ? text.onLand : formatDepth(depth.value, depthUnit)}
+              </strong>
             </button>
             <button
               type="button"
@@ -3605,7 +3724,11 @@ function NavigationApp() {
               aria-label={text.toggleDistanceUnit}
             >
               <span>{text.distanceToLand}</span>
-              <strong>{formatDistance(shoreline.distanceMeters, distanceUnit)}</strong>
+              <strong>
+                {onLand
+                  ? text.onLand
+                  : formatDistance(shoreline.distanceMeters, distanceUnit)}
+              </strong>
             </button>
             <Waves size={28} />
           </div>

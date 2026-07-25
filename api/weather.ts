@@ -15,6 +15,12 @@ type MetForecast = {
         instant?: {
           details?: Record<string, unknown>;
         };
+        next_1_hours?: {
+          summary?: { symbol_code?: string };
+        };
+        next_6_hours?: {
+          summary?: { symbol_code?: string };
+        };
       };
     }>;
   };
@@ -61,6 +67,11 @@ function getDetails(forecast: MetForecast) {
   return forecast.properties?.timeseries?.[0]?.data?.instant?.details;
 }
 
+function getSymbolCode(forecast: MetForecast) {
+  const data = forecast.properties?.timeseries?.[0]?.data;
+  return data?.next_1_hours?.summary?.symbol_code ?? data?.next_6_hours?.summary?.symbol_code ?? null;
+}
+
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   response.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1800");
 
@@ -85,6 +96,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       longitude,
     );
     const locationDetails = getDetails(locationForecast);
+    const symbolCode = getSymbolCode(locationForecast);
 
     let oceanDetails: Record<string, unknown> | undefined;
     try {
@@ -96,12 +108,14 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }
 
     response.status(200).json({
+      temperature: readNumber(locationDetails, "air_temperature"),
       windSpeed: readNumber(locationDetails, "wind_speed"),
       windDirection: readNumber(locationDetails, "wind_from_direction"),
       waveHeight: readNumber(oceanDetails, "sea_surface_wave_height"),
       waveDirection: readNumber(oceanDetails, "sea_surface_wave_from_direction"),
       currentSpeed: readNumber(oceanDetails, "sea_water_speed"),
       currentDirection: readNumber(oceanDetails, "sea_water_to_direction"),
+      symbolCode,
       source: "MET Norway",
     });
   } catch {

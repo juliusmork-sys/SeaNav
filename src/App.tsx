@@ -6,8 +6,16 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
+  ArrowUp,
   Anchor,
   BookOpen,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudMoon,
+  CloudRain,
+  CloudSnow,
   Compass,
   Lightbulb,
   Clock,
@@ -23,6 +31,7 @@ import {
   LocateFixed,
   Map as MapIcon,
   MapPin,
+  Moon,
   Phone,
   Recycle,
   Sailboat,
@@ -31,6 +40,7 @@ import {
   ShieldAlert,
   ShowerHead,
   SlidersHorizontal,
+  Sun,
   Toilet,
   Wind,
   X,
@@ -87,12 +97,14 @@ type BeachState = {
 
 type WeatherState = {
   status: "idle" | "loading" | "ready" | "error";
+  temperature: number | null;
   windSpeed: number | null;
   windDirection: number | null;
   waveHeight: number | null;
   waveDirection: number | null;
   currentSpeed: number | null;
   currentDirection: number | null;
+  symbolCode: string | null;
 };
 
 type Harbor = {
@@ -425,6 +437,7 @@ const UI_TEXT = {
     english: "English",
     accuracyRing: "Nøyaktighetsring",
     ownshipMarker: "Egen posisjon",
+    headingLine: "Vis kjøreretning (200 m linje)",
     safetyNotice: "Sikkerhetsvarsel",
     alertSound: "Varsellyd",
     seaMarks: "Sjømerker",
@@ -581,6 +594,7 @@ const UI_TEXT = {
     weatherToggle: "Vis værdata for posisjon",
     weatherWaiting: "Venter på GPS-posisjon",
     weatherUnavailable: "Værdata er ikke tilgjengelig akkurat nå.",
+    weatherOpenForecast: "Åpne værmelding for posisjonen på yr.no",
     wind: "Vind",
     waves: "Bølger",
     current: "Strøm",
@@ -708,6 +722,7 @@ const UI_TEXT = {
     english: "English",
     accuracyRing: "Accuracy ring",
     ownshipMarker: "Ownship marker",
+    headingLine: "Show heading line (200 m)",
     safetyNotice: "Safety notice",
     alertSound: "Alert sound",
     seaMarks: "Sea marks",
@@ -864,6 +879,7 @@ const UI_TEXT = {
     weatherToggle: "Show weather data for position",
     weatherWaiting: "Waiting for GPS position",
     weatherUnavailable: "Weather data is unavailable right now.",
+    weatherOpenForecast: "Open the forecast for this position on yr.no",
     wind: "Wind",
     waves: "Waves",
     current: "Current",
@@ -905,6 +921,8 @@ const UI_TEXT = {
 };
 
 const OSLO_FJORD: [number, number] = [10.735, 59.68];
+// Midt i Drøbaksundet, hoved-skipsleia inn til Oslo — trygt vannpunkt for GPS-simulering.
+const SIMULATED_BOAT_DEFAULT: [number, number] = [10.618, 59.66];
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const SJOKART_WMTS =
   "https://cache.kartverket.no/v1/wmts/1.0.0/sjokartraster/default/webmercator/{z}/{y}/{x}.png";
@@ -931,12 +949,14 @@ const DEFAULT_BEACH_STATE: BeachState = {
 };
 const DEFAULT_WEATHER_STATE: WeatherState = {
   status: "idle",
+  temperature: null,
   windSpeed: null,
   windDirection: null,
   waveHeight: null,
   waveDirection: null,
   currentSpeed: null,
   currentDirection: null,
+  symbolCode: null,
 };
 const EMPTY_HARBOR_FEATURE_COLLECTION: HarborState["featureCollection"] = {
   type: "FeatureCollection",
@@ -963,10 +983,30 @@ const OWNSHIP_MARKER_SVG = `
   </svg>
 `;
 
+const HEADING_LINE_DISTANCE_METERS = 200;
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 const toDegrees = (radians: number) => (radians * 180) / Math.PI;
 const metersPerSecondToKnots = (speed: number) => speed * 1.943844492;
 const normalizeBearing = (degrees: number) => (degrees + 360) % 360;
+
+const interpolateHeading = (
+  start: number | null,
+  end: number | null,
+  t: number,
+) => {
+  if (start === null || end === null) return end;
+  const delta = ((end - start + 540) % 360) - 180;
+  return normalizeBearing(start + delta * t);
+};
+
+const FIX_ANIMATION_DURATION_MS = 950;
+const GEOJSON_UPDATE_INTERVAL_MS = 120;
+const DEPTH_QUERY_MIN_DISTANCE_METERS = 25;
+const DEPTH_QUERY_MAX_AGE_MS = 30000;
+const SHALLOW_AHEAD_QUERY_MIN_DISTANCE_METERS = 25;
+const SHALLOW_AHEAD_QUERY_MAX_AGE_MS = 15000;
+const SHORELINE_QUERY_MIN_DISTANCE_METERS = 50;
+const SHORELINE_QUERY_MAX_AGE_MS = 30000;
 
 function distanceMeters(a: PositionFix, latitude: number, longitude: number) {
   return distanceBetweenCoordinates(a.latitude, a.longitude, latitude, longitude);
@@ -1113,15 +1153,83 @@ function formatHeading(
   return `${degrees}° ${compassPoint(heading)}`;
 }
 
-function formatWeatherMeasure(
-  value: number | null,
-  unit: string,
-  direction: number | null,
-) {
+function formatWeatherValue(value: number | null, unit: string) {
   if (value === null || Number.isNaN(value)) return "--";
-  const valueLabel = `${value.toFixed(1)} ${unit}`;
-  if (direction === null || Number.isNaN(direction)) return valueLabel;
-  return `${valueLabel} · ${Math.round(normalizeBearing(direction))}° ${compassPoint(direction)}`;
+  return `${value.toFixed(1)} ${unit}`;
+}
+
+// MET gir vind/bølge som "fra"-retning (kilden) og strøm som "til"-retning
+// (målet). Pilen skal alltid peke dit strømningen faktisk går, derfor +180°
+// på de to første og ingen justering på strøm.
+function weatherFlowArrowDegrees(direction: number | null, kind: "from" | "to") {
+  if (direction === null || Number.isNaN(direction)) return null;
+  const bearing = kind === "from" ? direction + 180 : direction;
+  return normalizeBearing(bearing);
+}
+
+const WEATHER_SYMBOL_ICONS: Record<string, ComponentType<{ size?: number }>> = {
+  clearsky_day: Sun,
+  clearsky_night: Moon,
+  clearsky_polartwilight: Sun,
+  fair_day: CloudSun,
+  fair_night: CloudMoon,
+  fair_polartwilight: CloudSun,
+  partlycloudy_day: CloudSun,
+  partlycloudy_night: CloudMoon,
+  partlycloudy_polartwilight: CloudSun,
+  cloudy: Cloud,
+  fog: CloudFog,
+  thunder: CloudLightning,
+  lightssleetshowersandthunder: CloudLightning,
+  lightssnowshowersandthunder: CloudLightning,
+  lightrainandthunder: CloudLightning,
+  rainandthunder: CloudLightning,
+  heavyrainandthunder: CloudLightning,
+};
+
+function buildYrForecastUrl(latitude: number, longitude: number, language: Language) {
+  const coords = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+  return language === "no"
+    ? `https://www.yr.no/nb/detaljert/graf/${coords}`
+    : `https://www.yr.no/en/forecast/graph/${coords}`;
+}
+
+function weatherSymbolIcon(symbolCode: string | null) {
+  if (!symbolCode) return CloudSun;
+  if (WEATHER_SYMBOL_ICONS[symbolCode]) return WEATHER_SYMBOL_ICONS[symbolCode];
+  if (symbolCode.includes("thunder")) return CloudLightning;
+  if (symbolCode.includes("snow")) return CloudSnow;
+  if (symbolCode.includes("sleet")) return CloudSnow;
+  if (symbolCode.includes("drizzle")) return CloudDrizzle;
+  if (symbolCode.includes("rain")) return CloudRain;
+  if (symbolCode.includes("fog")) return CloudFog;
+  if (symbolCode.startsWith("cloudy")) return Cloud;
+  if (symbolCode.startsWith("partlycloudy_night")) return CloudMoon;
+  if (symbolCode.startsWith("partlycloudy") || symbolCode.startsWith("fair")) return CloudSun;
+  if (symbolCode.startsWith("clearsky_night")) return Moon;
+  if (symbolCode.startsWith("clearsky")) return Sun;
+  return CloudSun;
+}
+
+function CurrentArrowsIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 9a6.5 6.5 0 0 1 7 0 6.5 6.5 0 0 0 7 0" />
+      <path d="M16.5 7L19 9L16.5 11" transform="rotate(-22.58 19 9)" />
+      <path d="M5 15a6.5 6.5 0 0 1 7 0 6.5 6.5 0 0 0 7 0" />
+      <path d="M16.5 13L19 15L16.5 17" transform="rotate(-22.58 19 15)" />
+    </svg>
+  );
 }
 
 function getVisibleMapPadding(): CameraPadding {
@@ -1853,12 +1961,14 @@ async function fetchWeather(latitude: number, longitude: number) {
 
   return {
     status: "ready",
+    temperature: valueOrNull(payload.temperature),
     windSpeed: valueOrNull(payload.windSpeed),
     windDirection: valueOrNull(payload.windDirection),
     waveHeight: valueOrNull(payload.waveHeight),
     waveDirection: valueOrNull(payload.waveDirection),
     currentSpeed: valueOrNull(payload.currentSpeed),
     currentDirection: valueOrNull(payload.currentDirection),
+    symbolCode: typeof payload.symbolCode === "string" ? payload.symbolCode : null,
   } satisfies WeatherState;
 }
 
@@ -2066,6 +2176,9 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 function NavigationApp() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
+  const positionAnimationFrameRef = useRef<number | null>(null);
+  const animatedFixRef = useRef<PositionFix | null>(null);
+  const lastGeoJsonUpdateRef = useRef(0);
   const shadowMapRef = useRef<Map | null>(null);
   const shadowMapCenterRef = useRef<{ latitude: number; longitude: number } | null>(
     null,
@@ -2076,9 +2189,25 @@ function NavigationApp() {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const lastFixRef = useRef<PositionFix | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const simulationIntervalRef = useRef<number | null>(null);
   const depthAbortRef = useRef<number | null>(null);
   const shallowAheadAbortRef = useRef<number | null>(null);
   const shorelineAbortRef = useRef<number | null>(null);
+  const depthQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  } | null>(null);
+  const shallowAheadQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  } | null>(null);
+  const shorelineQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  } | null>(null);
   const beachPositionAbortRef = useRef<number | null>(null);
   const beachMapAbortRef = useRef<number | null>(null);
   const harborMapAbortRef = useRef<number | null>(null);
@@ -2148,6 +2277,7 @@ function NavigationApp() {
     useState<GpsIssueCode | null>(null);
   const [showOwnship, setShowOwnship] = useState(true);
   const [showAccuracyRing, setShowAccuracyRing] = useState(true);
+  const [showHeadingLine, setShowHeadingLine] = useState(true);
   const [showNotice, setShowNotice] = useState(true);
   const [alertSoundEnabled, setAlertSoundEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -2308,17 +2438,23 @@ function NavigationApp() {
         boat.style.transform = `rotate(${nextFix.heading}deg)`;
       }
       if (followingLocation) {
-        map.easeTo({
+        map.jumpTo({
           center: point,
           zoom: Math.max(map.getZoom(), 13),
           bearing: northUp ? 0 : (nextFix.heading ?? map.getBearing()),
           padding: getVisibleMapPadding(),
-          duration: 700,
         });
       }
 
+      const now = performance.now();
+      const shouldUpdateGeoJson =
+        now - lastGeoJsonUpdateRef.current >= GEOJSON_UPDATE_INTERVAL_MS;
+      if (shouldUpdateGeoJson) {
+        lastGeoJsonUpdateRef.current = now;
+      }
+
       const source = map.getSource("accuracy") as maplibregl.GeoJSONSource;
-      if (source && nextFix.accuracy) {
+      if (source && nextFix.accuracy && shouldUpdateGeoJson) {
         source.setData(
           createAccuracyCircle(
             nextFix.longitude,
@@ -2326,6 +2462,33 @@ function NavigationApp() {
             Math.max(nextFix.accuracy, 8),
           ) as GeoJSON.GeoJSON,
         );
+      }
+
+      const headingLineSource = map.getSource(
+        "heading-line",
+      ) as maplibregl.GeoJSONSource;
+      if (headingLineSource && shouldUpdateGeoJson) {
+        if (nextFix.heading !== null) {
+          const tip = destinationPoint(
+            nextFix.latitude,
+            nextFix.longitude,
+            nextFix.heading,
+            HEADING_LINE_DISTANCE_METERS,
+          );
+          headingLineSource.setData({
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [nextFix.longitude, nextFix.latitude],
+                [tip.longitude, tip.latitude],
+              ],
+            },
+            properties: {},
+          });
+        } else {
+          headingLineSource.setData(EMPTY_FEATURE_COLLECTION as GeoJSON.GeoJSON);
+        }
       }
     },
     [followingLocation, northUp],
@@ -2885,6 +3048,20 @@ function NavigationApp() {
           "line-width": 2.4,
         },
       });
+      map.addSource("heading-line", {
+        type: "geojson",
+        data: EMPTY_FEATURE_COLLECTION,
+      });
+      map.addLayer({
+        id: "heading-line",
+        type: "line",
+        source: "heading-line",
+        paint: {
+          "line-color": "#111827",
+          "line-opacity": 0.86,
+          "line-width": 2.4,
+        },
+      });
     });
 
     const markerEl = document.createElement("div");
@@ -3050,6 +3227,101 @@ function NavigationApp() {
   }, [showAccuracyRing]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getLayer("heading-line")) return;
+    map.setLayoutProperty(
+      "heading-line",
+      "visibility",
+      showHeadingLine ? "visible" : "none",
+    );
+  }, [showHeadingLine]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const globalWindow = window as unknown as {
+      seanavSimulateBoat?: (options?: {
+        latitude?: number;
+        longitude?: number;
+        heading?: number;
+        speedKnots?: number;
+      }) => void;
+      seanavStopSimulation?: () => void;
+    };
+
+    globalWindow.seanavSimulateBoat = (options) => {
+      if (simulationIntervalRef.current !== null) {
+        window.clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+
+      let position = {
+        latitude: options?.latitude ?? SIMULATED_BOAT_DEFAULT[1],
+        longitude: options?.longitude ?? SIMULATED_BOAT_DEFAULT[0],
+      };
+      const heading = normalizeBearing(options?.heading ?? 45);
+      const speedKnots = options?.speedKnots ?? 8;
+      const metersPerTick = (speedKnots * 0.514444) * 1;
+
+      const tick = () => {
+        const nextFix: PositionFix = {
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracy: 5,
+          speedKnots,
+          heading,
+          headingSource: "gps",
+          timestamp: Date.now(),
+        };
+        lastFixRef.current = nextFix;
+        setFix(nextFix);
+        setTracking(true);
+        setGpsIssue(null);
+
+        if (speedKnots > 0) {
+          position = destinationPoint(
+            position.latitude,
+            position.longitude,
+            heading,
+            metersPerTick,
+          );
+        }
+      };
+
+      tick();
+      simulationIntervalRef.current = window.setInterval(tick, 1000);
+    };
+
+    globalWindow.seanavStopSimulation = () => {
+      if (simulationIntervalRef.current !== null) {
+        window.clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
+      }
+    };
+
+    const simParam = new URLSearchParams(window.location.search).get("sim");
+    if (simParam !== null) {
+      const [latitude, longitude, heading, speedKnots] = simParam
+        .split(",")
+        .map((value) => (value.trim() === "" ? undefined : Number(value)));
+      globalWindow.seanavSimulateBoat({
+        latitude,
+        longitude,
+        heading,
+        speedKnots,
+      });
+    }
+
+    return () => {
+      delete globalWindow.seanavSimulateBoat;
+      delete globalWindow.seanavStopSimulation;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!followingLocation || !fix) return;
 
     const handleViewportChange = () => {
@@ -3107,15 +3379,61 @@ function NavigationApp() {
 
   useEffect(() => {
     if (!fix) return;
-    setPositionOnMap(fix);
+
+    const previous = animatedFixRef.current ?? fix;
+    const startLatitude = previous.latitude;
+    const startLongitude = previous.longitude;
+    const startHeading = previous.heading;
+    const startTime = performance.now();
+
+    if (positionAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(positionAnimationFrameRef.current);
+    }
+
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startTime) / FIX_ANIMATION_DURATION_MS);
+      const interpolatedFix: PositionFix = {
+        ...fix,
+        latitude: startLatitude + (fix.latitude - startLatitude) * t,
+        longitude: startLongitude + (fix.longitude - startLongitude) * t,
+        heading: interpolateHeading(startHeading, fix.heading, t),
+      };
+      animatedFixRef.current = interpolatedFix;
+      setPositionOnMap(interpolatedFix);
+
+      if (t < 1) {
+        positionAnimationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        positionAnimationFrameRef.current = null;
+      }
+    };
+
+    positionAnimationFrameRef.current = requestAnimationFrame(step);
+
+    if (onLand) {
+      if (depthAbortRef.current) {
+        window.clearTimeout(depthAbortRef.current);
+      }
+      setDepth({ status: "idle", value: null, message: text.onLand });
+      return;
+    }
+
+    const lastDepthQuery = depthQueryRef.current;
+    if (
+      lastDepthQuery &&
+      Date.now() - lastDepthQuery.timestamp < DEPTH_QUERY_MAX_AGE_MS &&
+      distanceBetweenCoordinates(
+        fix.latitude,
+        fix.longitude,
+        lastDepthQuery.latitude,
+        lastDepthQuery.longitude,
+      ) < DEPTH_QUERY_MIN_DISTANCE_METERS
+    ) {
+      return;
+    }
 
     if (depthAbortRef.current) {
       window.clearTimeout(depthAbortRef.current);
-    }
-
-    if (onLand) {
-      setDepth({ status: "idle", value: null, message: text.onLand });
-      return;
     }
 
     setDepth((current) => ({
@@ -3123,6 +3441,12 @@ function NavigationApp() {
       status: "loading",
       message: text.updatingEstimate,
     }));
+
+    depthQueryRef.current = {
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      timestamp: Date.now(),
+    };
 
     depthAbortRef.current = window.setTimeout(() => {
       fetchEstimatedDepth(fix.latitude, fix.longitude, language)
@@ -3154,19 +3478,42 @@ function NavigationApp() {
   useEffect(() => {
     if (!fix) return;
 
-    if (shorelineAbortRef.current) {
-      window.clearTimeout(shorelineAbortRef.current);
-    }
-
     if (onLand) {
+      if (shorelineAbortRef.current) {
+        window.clearTimeout(shorelineAbortRef.current);
+      }
       setShoreline({ status: "idle", distanceMeters: null });
       return;
+    }
+
+    const lastShorelineQuery = shorelineQueryRef.current;
+    if (
+      lastShorelineQuery &&
+      Date.now() - lastShorelineQuery.timestamp < SHORELINE_QUERY_MAX_AGE_MS &&
+      distanceBetweenCoordinates(
+        fix.latitude,
+        fix.longitude,
+        lastShorelineQuery.latitude,
+        lastShorelineQuery.longitude,
+      ) < SHORELINE_QUERY_MIN_DISTANCE_METERS
+    ) {
+      return;
+    }
+
+    if (shorelineAbortRef.current) {
+      window.clearTimeout(shorelineAbortRef.current);
     }
 
     setShoreline((current) => ({
       ...current,
       status: "loading",
     }));
+
+    shorelineQueryRef.current = {
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      timestamp: Date.now(),
+    };
 
     shorelineAbortRef.current = window.setTimeout(() => {
       fetchDistanceToLand(fix.latitude, fix.longitude)
@@ -3191,10 +3538,6 @@ function NavigationApp() {
       return;
     }
 
-    if (shallowAheadAbortRef.current) {
-      window.clearTimeout(shallowAheadAbortRef.current);
-    }
-
     const lookaheadMeters = getShallowLookaheadDistance(fix.speedKnots);
     const ahead = destinationPoint(
       fix.latitude,
@@ -3203,11 +3546,36 @@ function NavigationApp() {
       lookaheadMeters,
     );
 
-    setShallowAheadDepth((current) => ({
-      ...current,
-      status: "loading",
-      message: text.updatingEstimate,
-    }));
+    const lastShallowAheadQuery = shallowAheadQueryRef.current;
+    if (
+      lastShallowAheadQuery &&
+      Date.now() - lastShallowAheadQuery.timestamp <
+        SHALLOW_AHEAD_QUERY_MAX_AGE_MS &&
+      distanceBetweenCoordinates(
+        ahead.latitude,
+        ahead.longitude,
+        lastShallowAheadQuery.latitude,
+        lastShallowAheadQuery.longitude,
+      ) < SHALLOW_AHEAD_QUERY_MIN_DISTANCE_METERS
+    ) {
+      return;
+    }
+
+    if (shallowAheadAbortRef.current) {
+      window.clearTimeout(shallowAheadAbortRef.current);
+    }
+
+    setShallowAheadDepth((current) =>
+      current.status === "ready"
+        ? current
+        : { ...current, status: "loading", message: text.updatingEstimate },
+    );
+
+    shallowAheadQueryRef.current = {
+      latitude: ahead.latitude,
+      longitude: ahead.longitude,
+      timestamp: Date.now(),
+    };
 
     shallowAheadAbortRef.current = window.setTimeout(() => {
       fetchEstimatedDepth(ahead.latitude, ahead.longitude, language)
@@ -3219,11 +3587,15 @@ function NavigationApp() {
           });
         })
         .catch(() => {
-          setShallowAheadDepth({
-            status: "error",
-            value: null,
-            message: text.depthUnavailable,
-          });
+          setShallowAheadDepth((current) =>
+            current.status === "ready"
+              ? current
+              : {
+                  status: "error",
+                  value: null,
+                  message: text.depthUnavailable,
+                },
+          );
         });
     }, 950);
   }, [fix, language, onLand, text.depthUnavailable, text.updatingEstimate]);
@@ -3602,6 +3974,11 @@ function NavigationApp() {
       onChange: setShowAccuracyRing,
     },
     {
+      label: text.headingLine,
+      checked: showHeadingLine,
+      onChange: setShowHeadingLine,
+    },
+    {
       label: text.ownshipMarker,
       checked: showOwnship,
       onChange: setShowOwnship,
@@ -3643,21 +4020,24 @@ function NavigationApp() {
     window.location.href = vippsPaymentUrl;
   };
 
-  return (
-    <main className={weatherOpen ? "app-shell weather-open" : "app-shell"}>
-      <div ref={mapContainer} className="map" aria-label={text.navigationMap} />
+  const coordinatePanel = showPrecisePosition && (
+    <section
+      className={weatherOpen ? "coordinate-panel coordinate-panel-inline" : "coordinate-panel"}
+      aria-label={text.precisePosition}
+    >
+      <span>{text.precisePosition}</span>
+      <strong>
+        {formatPreciseCoordinate(fix?.latitude, "N", "S")}
+      </strong>
+      <strong>
+        {formatPreciseCoordinate(fix?.longitude, "E", "W")}
+      </strong>
+    </section>
+  );
 
-      {showPrecisePosition && (
-        <section className="coordinate-panel" aria-label={text.precisePosition}>
-          <span>{text.precisePosition}</span>
-          <strong>
-            {formatPreciseCoordinate(fix?.latitude, "N", "S")}
-          </strong>
-          <strong>
-            {formatPreciseCoordinate(fix?.longitude, "E", "W")}
-          </strong>
-        </section>
-      )}
+  return (
+    <main className="app-shell">
+      <div ref={mapContainer} className="map" aria-label={text.navigationMap} />
 
       <section className="topbar" aria-label={text.navigationStatus}>
         <div className="brand" aria-label="SeaNav">
@@ -3669,37 +4049,80 @@ function NavigationApp() {
         </div>
       </section>
 
-      {weatherOpen && (
-        <section className="weather-card map-weather-card" aria-label={text.weatherHere}>
-          <div className="weather-card-heading">
-            <CloudSun size={18} />
-            <strong>{text.weatherHere}</strong>
+      <div className="map-center-overlays">
+      {weatherOpen && (() => {
+        const SymbolIcon = weatherSymbolIcon(weather.symbolCode);
+        const windArrow = weatherFlowArrowDegrees(weather.windDirection, "from");
+        const waveArrow = weatherFlowArrowDegrees(weather.waveDirection, "from");
+        const currentArrow = weatherFlowArrowDegrees(weather.currentDirection, "to");
+        const forecastUrl = fix && buildYrForecastUrl(fix.latitude, fix.longitude, language);
+
+        return (
+          <div className="map-top-cluster">
+            <button
+              type="button"
+              className="weather-card map-weather-card"
+              aria-label={fix ? `${text.weatherHere} — ${text.weatherOpenForecast}` : text.weatherHere}
+              disabled={!forecastUrl}
+              onClick={() => {
+                if (forecastUrl) window.open(forecastUrl, "_blank", "noopener,noreferrer");
+              }}
+            >
+              <div className="weather-card-symbol">
+                <SymbolIcon size={22} />
+                {weather.temperature !== null && (
+                  <strong>{Math.round(weather.temperature)}°</strong>
+                )}
+              </div>
+              {!fix ? (
+                <p className="weather-card-message">{text.weatherWaiting}</p>
+              ) : weather.status === "error" ? (
+                <p className="weather-card-message">{text.weatherUnavailable}</p>
+              ) : (
+                <div className="weather-card-metrics" aria-busy={weather.status === "loading"}>
+                  <div className="weather-card-metric">
+                    <div className="weather-card-metric-label">
+                      <Wind size={14} />
+                      <span>{text.wind}</span>
+                    </div>
+                    <div className="weather-card-metric-value">
+                      <strong>{formatWeatherValue(weather.windSpeed, "m/s")}</strong>
+                      {windArrow !== null && (
+                        <ArrowUp size={13} style={{ transform: `rotate(${windArrow}deg)` }} />
+                      )}
+                    </div>
+                  </div>
+                  <div className="weather-card-metric">
+                    <div className="weather-card-metric-label">
+                      <Waves size={14} />
+                      <span>{text.waves}</span>
+                    </div>
+                    <div className="weather-card-metric-value">
+                      <strong>{formatWeatherValue(weather.waveHeight, "m")}</strong>
+                      {waveArrow !== null && (
+                        <ArrowUp size={13} style={{ transform: `rotate(${waveArrow}deg)` }} />
+                      )}
+                    </div>
+                  </div>
+                  <div className="weather-card-metric">
+                    <div className="weather-card-metric-label">
+                      <CurrentArrowsIcon size={14} />
+                      <span>{text.current}</span>
+                    </div>
+                    <div className="weather-card-metric-value">
+                      <strong>{formatWeatherValue(weather.currentSpeed, "m/s")}</strong>
+                      {currentArrow !== null && (
+                        <ArrowUp size={13} style={{ transform: `rotate(${currentArrow}deg)` }} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </button>
+            {coordinatePanel}
           </div>
-          {!fix ? (
-            <p className="weather-card-message">{text.weatherWaiting}</p>
-          ) : weather.status === "error" ? (
-            <p className="weather-card-message">{text.weatherUnavailable}</p>
-          ) : (
-            <div className="weather-card-metrics" aria-busy={weather.status === "loading"}>
-              <div className="weather-card-metric">
-                <Wind size={18} />
-                <span>{text.wind}</span>
-                <strong>{formatWeatherMeasure(weather.windSpeed, "m/s", weather.windDirection)}</strong>
-              </div>
-              <div className="weather-card-metric">
-                <Waves size={18} />
-                <span>{text.waves}</span>
-                <strong>{formatWeatherMeasure(weather.waveHeight, "m", weather.waveDirection)}</strong>
-              </div>
-              <div className="weather-card-metric">
-                <Waves size={18} />
-                <span>{text.current}</span>
-                <strong>{formatWeatherMeasure(weather.currentSpeed, "m/s", weather.currentDirection)}</strong>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
+        );
+      })()}
 
       {visibleGpsIssue && (
         <div className="gps-alert" role="alert">
@@ -3735,12 +4158,7 @@ function NavigationApp() {
       )}
 
       {visibleMarineAlert && marineAlertKey && (
-        <div
-          className={`marine-alert ${visibleMarineAlert.kind} ${
-            visibleGpsIssue ? "below-gps-alert" : ""
-          }`}
-          role="alert"
-        >
+        <div className={`marine-alert ${visibleMarineAlert.kind}`} role="alert">
           <ShieldAlert size={16} />
           <span>{visibleMarineAlert.message}</span>
           <button
@@ -3754,7 +4172,10 @@ function NavigationApp() {
           </button>
         </div>
       )}
+      </div>
 
+      <div className="bottom-dock">
+      {!weatherOpen && coordinatePanel}
       <section className="readout-panel" aria-label={text.liveNavigationData}>
           <div className="readout instrument-pair primary-depth">
             <button
@@ -4035,6 +4456,7 @@ function NavigationApp() {
             </div>
           )}
         </section>
+      </div>
 
       {harborMapOpen && (
         <section className="harbor-map-modal" role="dialog" aria-modal="true" aria-label={harborMapOpen.name}>

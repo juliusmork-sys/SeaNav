@@ -2261,14 +2261,32 @@ function NavigationApp() {
   const [followingLocation, setFollowingLocation] = useState(true);
   const [northUp, setNorthUp] = useState(true);
   const [mapBearing, setMapBearing] = useState(0);
-  const [chartVisible, setChartVisible] = useState(true);
-  const [harborsVisible, setHarborsVisible] = useState(false);
-  const [beachDisplayMode, setBeachDisplayMode] =
-    useState<BeachDisplayMode>("off");
-  const [baseMap, setBaseMap] = useState<BaseMap>("map");
+  const [chartVisible, setChartVisible] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("seanav-chart-visible") !== "off";
+  });
+  const [harborsVisible, setHarborsVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("seanav-harbors-visible") === "on";
+  });
+  const [beachDisplayMode, setBeachDisplayMode] = useState<BeachDisplayMode>(
+    () => {
+      if (typeof window === "undefined") return "off";
+      const stored = window.localStorage.getItem("seanav-beach-display-mode");
+      return stored === "icons" || stored === "areas" ? stored : "off";
+    },
+  );
+  const [baseMap, setBaseMap] = useState<BaseMap>(() => {
+    if (typeof window === "undefined") return "map";
+    const stored = window.localStorage.getItem("seanav-base-map");
+    return stored === "satellite" || stored === "off" ? stored : "map";
+  });
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
-  const [weatherOpen, setWeatherOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("seanav-weather-open") === "on";
+  });
   const [isPortrait, setIsPortrait] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 820px) and (orientation: portrait)").matches;
@@ -2279,15 +2297,30 @@ function NavigationApp() {
   const [gpsIssue, setGpsIssue] = useState<GpsIssue | null>(null);
   const [dismissedGpsIssueCode, setDismissedGpsIssueCode] =
     useState<GpsIssueCode | null>(null);
-  const [showOwnship, setShowOwnship] = useState(true);
-  const [showAccuracyRing, setShowAccuracyRing] = useState(true);
-  const [showHeadingLine, setShowHeadingLine] = useState(true);
-  const [showNotice, setShowNotice] = useState(true);
+  const [showOwnship, setShowOwnship] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("seanav-show-ownship") !== "off";
+  });
+  const [showAccuracyRing, setShowAccuracyRing] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("seanav-show-accuracy-ring") !== "off";
+  });
+  const [showHeadingLine, setShowHeadingLine] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("seanav-show-heading-line") !== "off";
+  });
+  const [showNotice, setShowNotice] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("seanav-show-notice") !== "off";
+  });
   const [alertSoundEnabled, setAlertSoundEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("seanav-alert-sound") !== "muted";
   });
-  const [showPrecisePosition, setShowPrecisePosition] = useState(false);
+  const [showPrecisePosition, setShowPrecisePosition] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("seanav-show-precise-position") === "on";
+  });
   const [dismissedAlertKey, setDismissedAlertKey] = useState<string | null>(null);
   const [speedUnit, setSpeedUnit] = useState<SpeedUnit>(() => {
     if (typeof window === "undefined") return "kn";
@@ -2388,6 +2421,55 @@ function NavigationApp() {
       alertSoundEnabled ? "enabled" : "muted",
     );
   }, [alertSoundEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-chart-visible", chartVisible ? "on" : "off");
+  }, [chartVisible]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-harbors-visible", harborsVisible ? "on" : "off");
+  }, [harborsVisible]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-beach-display-mode", beachDisplayMode);
+  }, [beachDisplayMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-base-map", baseMap);
+  }, [baseMap]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-weather-open", weatherOpen ? "on" : "off");
+  }, [weatherOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-show-ownship", showOwnship ? "on" : "off");
+  }, [showOwnship]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "seanav-show-accuracy-ring",
+      showAccuracyRing ? "on" : "off",
+    );
+  }, [showAccuracyRing]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "seanav-show-heading-line",
+      showHeadingLine ? "on" : "off",
+    );
+  }, [showHeadingLine]);
+
+  useEffect(() => {
+    window.localStorage.setItem("seanav-show-notice", showNotice ? "on" : "off");
+  }, [showNotice]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "seanav-show-precise-position",
+      showPrecisePosition ? "on" : "off",
+    );
+  }, [showPrecisePosition]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

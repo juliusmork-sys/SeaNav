@@ -578,6 +578,7 @@ const UI_TEXT = {
     harbors: "Havner",
     weather: "Vær",
     weatherHere: "Vær her",
+    weatherToggle: "Vis værdata for posisjon",
     weatherWaiting: "Venter på GPS-posisjon",
     weatherUnavailable: "Værdata er ikke tilgjengelig akkurat nå.",
     wind: "Vind",
@@ -860,6 +861,7 @@ const UI_TEXT = {
     harbors: "Harbours",
     weather: "Weather",
     weatherHere: "Weather here",
+    weatherToggle: "Show weather data for position",
     weatherWaiting: "Waiting for GPS position",
     weatherUnavailable: "Weather data is unavailable right now.",
     wind: "Wind",
@@ -3619,6 +3621,11 @@ function NavigationApp() {
       checked: showPrecisePosition,
       onChange: setShowPrecisePosition,
     },
+    {
+      label: text.weatherToggle,
+      checked: weatherOpen,
+      onChange: setWeatherOpen,
+    },
   ];
   const configuredVippsPaymentUrl =
     typeof import.meta.env.VITE_VIPPS_PAYMENT_URL === "string"
@@ -4013,15 +4020,6 @@ function NavigationApp() {
               >
                 <Anchor size={20} />
                 <span>{text.harbors}</span>
-              </button>
-              <button
-                type="button"
-                className={weatherOpen ? "active" : ""}
-                onClick={() => setWeatherOpen((value) => !value)}
-                title={text.weatherHere}
-              >
-                <CloudSun size={20} />
-                <span>{text.weather}</span>
               </button>
             </div>
           )}

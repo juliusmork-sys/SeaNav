@@ -553,6 +553,10 @@ button {
   padding: 8px 12px;
 }
 
+.coordinate-panel.coordinate-panel-inline span {
+  display: none;
+}
+
 .coordinate-panel.coordinate-panel-inline strong {
   font-size: 0.76rem;
 }
@@ -1203,6 +1207,8 @@ button {
 }
 
 .panel-drawer {
+  position: relative;
+  z-index: 4;
   margin-top: 0;
   padding: 8px;
   border: 1px solid rgba(188, 225, 235, 0.16);
@@ -4196,6 +4202,13 @@ button {
     transform: translateX(-50%);
   }
 
+  /* Tabben skal alltid ligge bak innstillinger-/kartlag-skuffen når den er
+     åpen, ikke bare stables riktig i z-index (skuffen kan stikke ut over
+     tabbens topp uten å dekke den helt). */
+  .app-shell.panel-drawer-open .bottom-dock > .coordinate-panel {
+    visibility: hidden;
+  }
+
   .coordinate-panel.coordinate-panel-inline {
     top: auto;
     right: auto;
@@ -4683,7 +4696,7 @@ button {
   }
 
   .readout-panel .instrument-pair strong {
-    font-size: 1.65rem;
+    font-size: 1.32rem;
   }
 }
 
@@ -4706,7 +4719,7 @@ button {
   /* Behold største font-størrelse for verdiene (samme som ikke-komprimert
      visning) selv i det smale liggende panelet, likt for alle felt. */
   .readout-panel .instrument-pair strong {
-    font-size: 1.65rem;
+    font-size: 1.485rem;
   }
 }
 

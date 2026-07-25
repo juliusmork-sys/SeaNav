@@ -2269,6 +2269,10 @@ function NavigationApp() {
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 820px) and (orientation: portrait)").matches;
+  });
   const [harborMapOpen, setHarborMapOpen] = useState<Harbor | null>(null);
   const [seaMarksOpen, setSeaMarksOpen] = useState(false);
   const [gpsHelpOpen, setGpsHelpOpen] = useState(false);
@@ -2346,6 +2350,16 @@ function NavigationApp() {
         requestPermission?: () => Promise<PermissionState>;
       }
     ).requestPermission === "function";
+
+  useEffect(() => {
+    const query = window.matchMedia(
+      "(max-width: 820px) and (orientation: portrait)",
+    );
+    const handleChange = () => setIsPortrait(query.matches);
+    handleChange();
+    query.addEventListener("change", handleChange);
+    return () => query.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = language === "no" ? "nb" : "en";
@@ -4020,9 +4034,10 @@ function NavigationApp() {
     window.location.href = vippsPaymentUrl;
   };
 
+  const coordinatePanelInline = weatherOpen && !isPortrait;
   const coordinatePanel = showPrecisePosition && (
     <section
-      className={weatherOpen ? "coordinate-panel coordinate-panel-inline" : "coordinate-panel"}
+      className={coordinatePanelInline ? "coordinate-panel coordinate-panel-inline" : "coordinate-panel"}
       aria-label={text.precisePosition}
     >
       <span>{text.precisePosition}</span>
@@ -4036,7 +4051,7 @@ function NavigationApp() {
   );
 
   return (
-    <main className="app-shell">
+    <main className={displayOpen || controlsOpen ? "app-shell panel-drawer-open" : "app-shell"}>
       <div ref={mapContainer} className="map" aria-label={text.navigationMap} />
 
       <section className="topbar" aria-label={text.navigationStatus}>
@@ -4119,7 +4134,7 @@ function NavigationApp() {
                 </div>
               )}
             </button>
-            {coordinatePanel}
+            {coordinatePanelInline && coordinatePanel}
           </div>
         );
       })()}
@@ -4175,7 +4190,7 @@ function NavigationApp() {
       </div>
 
       <div className="bottom-dock">
-      {!weatherOpen && coordinatePanel}
+      {!coordinatePanelInline && coordinatePanel}
       <section className="readout-panel" aria-label={text.liveNavigationData}>
           <div className="readout instrument-pair primary-depth">
             <button

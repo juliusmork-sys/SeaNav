@@ -2064,6 +2064,10 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 function NavigationApp() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
+  const shadowMapRef = useRef<Map | null>(null);
+  const shadowMapCenterRef = useRef<{ latitude: number; longitude: number } | null>(
+    null,
+  );
   const baseStyleLayerIdsRef = useRef<string[]>([]);
   const beachDisplayModeRef = useRef<BeachDisplayMode>("off");
   const harborsVisibleRef = useRef(false);
@@ -2924,6 +2928,37 @@ function NavigationApp() {
     };
   }, []);
 
+  // Skjult kart-instans, alltid sentrert nær GPS-fix, uavhengig av hva
+  // brukeren panorerer/zoomer til på synlig kart. Brukes kun til å slå opp
+  // vann-polygoner for land-deteksjon — dermed er ikke deteksjonen bundet
+  // til synlig kartutsnitt eller zoom-nivå.
+  useEffect(() => {
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    container.style.top = "-9999px";
+    container.style.width = "256px";
+    container.style.height = "256px";
+    container.style.pointerEvents = "none";
+    document.body.appendChild(container);
+
+    const shadowMap = new maplibregl.Map({
+      container,
+      style: OPENFREEMAP_STYLE,
+      center: OSLO_FJORD,
+      zoom: 12,
+      interactive: false,
+      attributionControl: false,
+    });
+    shadowMapRef.current = shadowMap;
+
+    return () => {
+      shadowMap.remove();
+      shadowMapRef.current = null;
+      container.remove();
+    };
+  }, []);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getLayer("sjokart")) return;
@@ -3034,8 +3069,25 @@ function NavigationApp() {
   }, [fix, followingLocation]);
 
   useEffect(() => {
-    const map = mapRef.current;
+    const map = shadowMapRef.current;
     if (!map || !fix) return;
+
+    const lastCenter = shadowMapCenterRef.current;
+    const driftMeters = lastCenter
+      ? distanceBetweenCoordinates(
+          lastCenter.latitude,
+          lastCenter.longitude,
+          fix.latitude,
+          fix.longitude,
+        )
+      : Infinity;
+    if (driftMeters > 2000) {
+      shadowMapCenterRef.current = {
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+      };
+      map.jumpTo({ center: [fix.longitude, fix.latitude] });
+    }
 
     const evaluate = () => {
       const result = isPositionOnLand(map, fix.longitude, fix.latitude);

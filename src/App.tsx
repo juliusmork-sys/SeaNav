@@ -450,7 +450,7 @@ const UI_TEXT = {
     seaMarksGroupOther: "Andre flytende merker",
     seaMarksGroupFixed: "Faste merker",
     seaMarksGroupFixedIntro:
-      "Rundt 12 000 bunnfaste merker uten lys, ofte med refleks. Tre hovedtyper. Viser til begge sider (eller hvit krekse) = farbar led på begge sider.",
+      "Rundt 12 000 bunnfaste merker uten lys, ofte med refleks. Markerer småskjær og grunner. Viseren peker mot sikkert farvann. Tre hovedtyper. Der viser peker til begge sider (eller hvit krekse) = farbar led på begge sider.",
     seaMarksCardinal: [
       {
         title: "Nord kardinalmerke",
@@ -731,7 +731,7 @@ const UI_TEXT = {
     seaMarksGroupOther: "Other floating marks",
     seaMarksGroupFixed: "Fixed marks",
     seaMarksGroupFixedIntro:
-      "Around 12,000 fixed unlit marks, often with reflex. Three main types. Pointers to both sides (or a white topmark) means navigable water on both sides.",
+      "Around 12,000 fixed unlit marks, often with reflex. They mark small skerries and shoals. The pointer points toward safe water. Three main types. Where pointers face both sides (or a white topmark) = navigable water on both sides.",
     seaMarksCardinal: [
       {
         title: "North cardinal mark",

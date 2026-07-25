@@ -1349,16 +1349,185 @@ button {
   background: rgba(208, 244, 250, 0.92);
 }
 
-.sea-marks-grid {
-  display: grid;
+.sea-marks-scroll {
   max-width: 1060px;
   width: 100%;
   min-height: 0;
-  grid-template-columns: repeat(auto-fit, minmax(236px, 1fr));
-  gap: 10px;
   margin: 0 auto;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+.sea-marks-note {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid rgba(70, 98, 110, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  color: #476572;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.sea-marks-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #006b86;
+}
+
+.sea-marks-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 0 8px;
+  color: #0b2733;
+}
+
+.sea-marks-group-head strong {
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.sea-marks-rule {
+  flex: 1;
+  height: 1px;
+  background: rgba(70, 98, 110, 0.18);
+}
+
+.sea-marks-group-intro {
+  margin: 0 0 10px;
+  color: #476572;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.sea-marks-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.sea-mark-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
+  color: #476572;
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.sea-mark-meta span {
+  min-width: 46px;
+  color: #0b2733;
+  font-weight: 800;
+}
+
+.sea-mark-light {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(70, 98, 110, 0.2);
+  background: rgba(6, 25, 35, 0.06);
+  color: #0b2733;
+  font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-size: 0.72rem;
+}
+
+.sea-mark-light svg {
+  color: #006b86;
+}
+
+.sea-mark-light-red {
+  border-color: rgba(207, 35, 35, 0.28);
+  background: rgba(207, 35, 35, 0.1);
+  color: #8f1a1a;
+  font-family: inherit;
+  font-weight: 800;
+}
+
+.sea-mark-light-red svg {
+  color: #8f1a1a;
+}
+
+.sea-mark-light-green {
+  border-color: rgba(19, 138, 69, 0.28);
+  background: rgba(19, 138, 69, 0.1);
+  color: #0c5c2d;
+  font-family: inherit;
+  font-weight: 800;
+}
+
+.sea-mark-light-green svg {
+  color: #0c5c2d;
+}
+
+.sea-mark-light-yellow {
+  border-color: rgba(201, 148, 0, 0.3);
+  background: rgba(201, 148, 0, 0.12);
+  color: #8a6600;
+}
+
+.sea-mark-light-yellow svg {
+  color: #8a6600;
+}
+
+.sea-marks-lateral {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  margin: 0 0 16px;
+}
+
+.sea-mark-lateral-card {
+  padding: 11px 10px;
+  border: 1px solid rgba(70, 98, 110, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.sea-mark-lateral-card strong {
+  display: block;
+  margin-top: 2px;
+  color: #061923;
+  font-size: 0.82rem;
+}
+
+.sea-mark-lateral-card .sea-mark-meta {
+  justify-content: center;
+  font-size: 0.72rem;
+}
+
+.sea-mark-lateral-card .sea-mark-meta span {
+  min-width: 0;
+}
+
+.sea-mark-lateral-card p {
+  margin: 5px 0 0;
+  color: #476572;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.sea-mark-led-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sea-mark-led {
+  width: 56px;
+  height: 100%;
+  max-height: 180px;
 }
 
 .gps-help-grid {
@@ -1404,11 +1573,10 @@ button {
 
 .sea-mark-card {
   display: grid;
-  min-height: 122px;
-  grid-template-columns: 54px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 11px;
   align-items: center;
-  padding: 12px;
+  padding: 11px 12px;
   border: 1px solid rgba(70, 98, 110, 0.24);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
@@ -1418,123 +1586,38 @@ button {
 .sea-mark-card strong {
   display: block;
   color: #061923;
-  font-size: 0.86rem;
-  line-height: 1.15;
-}
-
-.sea-mark-card span {
-  display: block;
-  margin-top: 4px;
-  color: #274653;
-  font-size: 0.76rem;
-  font-weight: 800;
+  font-size: 0.85rem;
   line-height: 1.15;
 }
 
 .sea-mark-card p {
-  margin: 7px 0 0;
+  margin: 5px 0 0;
   color: #476572;
   font-size: 0.76rem;
   line-height: 1.25;
 }
 
 .sea-mark-symbol {
-  position: relative;
   display: grid;
-  width: 44px;
-  height: 76px;
   justify-self: center;
   place-items: center;
 }
 
-.sea-mark-symbol::before {
-  width: 28px;
-  height: 54px;
-  border: 2px solid rgba(6, 25, 35, 0.24);
-  border-radius: 999px 999px 7px 7px;
-  content: "";
-  background: #ffffff;
-  box-shadow: 0 2px 5px rgba(11, 35, 46, 0.16);
+.sea-mark-svg {
+  width: 44px;
+  height: 82px;
 }
 
-.sea-mark-symbol span {
-  position: absolute;
-  bottom: 4px;
-  width: 4px;
-  height: 18px;
-  border-radius: 999px;
-  background: #0b2733;
-}
-
-.sea-mark-symbol.port::before {
-  background: #cf2323;
-}
-
-.sea-mark-symbol.starboard::before {
-  background: #138a45;
-}
-
-.sea-mark-symbol.north::before {
-  background: linear-gradient(to bottom, #101820 0 50%, #f2c94c 50% 100%);
-}
-
-.sea-mark-symbol.south::before {
-  background: linear-gradient(to bottom, #f2c94c 0 50%, #101820 50% 100%);
-}
-
-.sea-mark-symbol.east::before {
-  background:
-    linear-gradient(
-      to bottom,
-      #101820 0 34%,
-      #f2c94c 34% 66%,
-      #101820 66% 100%
-    );
-}
-
-.sea-mark-symbol.west::before {
-  background:
-    linear-gradient(
-      to bottom,
-      #f2c94c 0 34%,
-      #101820 34% 66%,
-      #f2c94c 66% 100%
-    );
-}
-
-.sea-mark-symbol.special::before {
-  background: #f2c94c;
-}
-
-.sea-mark-symbol.danger::before {
-  background:
-    linear-gradient(
-      to bottom,
-      #101820 0 34%,
-      #cf2323 34% 66%,
-      #101820 66% 100%
-    );
-}
-
-.sea-mark-symbol.safe::before {
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #cf2323 0 7px,
-      #ffffff 7px 14px
-    );
-}
-
-.sea-mark-symbol.fixed::before {
-  width: 10px;
-  border-radius: 3px;
-  background: #0b2733;
+.sea-mark-svg-lateral {
+  width: 40px;
+  height: 66px;
 }
 
 .sea-marks-source {
-  max-width: 1060px;
-  width: 100%;
-  margin: 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
   color: #006b86;
   font-size: 0.78rem;
   font-weight: 800;

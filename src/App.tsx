@@ -3,9 +3,13 @@ import type { ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import maplibregl, { Map } from "maplibre-gl";
 import {
+  AlertTriangle,
+  ArrowLeftRight,
   ArrowRight,
   Anchor,
   BookOpen,
+  Compass,
+  Lightbulb,
   Clock,
   CloudSun,
   Crosshair,
@@ -129,10 +133,195 @@ type GpsIssue = {
 };
 type SeaMark = {
   title: string;
-  description: string;
   detail: string;
   className: string;
+  color?: string;
+  reflex?: string;
+  light?: string;
+  lightVariant?: "white" | "red" | "green" | "yellow";
 };
+
+function SeaMarkSymbol({ type }: { type: string }) {
+  const clip = `smclip-${type}`;
+  const outline = "rgba(6,25,35,0.4)";
+  const base = "0 0 44 90";
+  switch (type) {
+    case "north":
+    case "south":
+    case "east":
+    case "west": {
+      const bands =
+        type === "north"
+          ? [
+              { y: 20, h: 31, fill: "#101820" },
+              { y: 51, h: 31, fill: "#f2c94c" },
+            ]
+          : type === "south"
+            ? [
+                { y: 20, h: 31, fill: "#f2c94c" },
+                { y: 51, h: 31, fill: "#101820" },
+              ]
+            : type === "east"
+              ? [
+                  { y: 20, h: 62, fill: "#101820" },
+                  { y: 46, h: 10, fill: "#f2c94c" },
+                ]
+              : [
+                  { y: 20, h: 62, fill: "#f2c94c" },
+                  { y: 46, h: 10, fill: "#101820" },
+                ];
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <defs>
+            <clipPath id={clip}>
+              <rect x="15" y="20" width="14" height="62" rx="6" />
+            </clipPath>
+          </defs>
+          <g clipPath={`url(#${clip})`}>
+            {bands.map((b, i) => (
+              <rect key={i} x="15" y={b.y} width="14" height={b.h} fill={b.fill} />
+            ))}
+          </g>
+          <rect x="15" y="20" width="14" height="62" rx="6" fill="none" stroke={outline} strokeWidth="1.2" />
+          <ellipse cx="22" cy="84" rx="11" ry="3" fill="#0b2733" opacity="0.14" />
+        </svg>
+      );
+    }
+    case "port":
+      return (
+        <svg viewBox="0 0 44 74" className="sea-mark-svg sea-mark-svg-lateral" aria-hidden="true">
+          <rect x="15" y="10" width="14" height="56" rx="6" fill="#cf2323" stroke={outline} strokeWidth="1.4" />
+          <ellipse cx="22" cy="68" rx="11" ry="2.6" fill="#0b2733" opacity="0.14" />
+        </svg>
+      );
+    case "starboard":
+      return (
+        <svg viewBox="0 0 44 74" className="sea-mark-svg sea-mark-svg-lateral" aria-hidden="true">
+          <rect x="15" y="10" width="14" height="56" rx="6" fill="#138a45" stroke={outline} strokeWidth="1.4" />
+          <ellipse cx="22" cy="68" rx="11" ry="2.6" fill="#0b2733" opacity="0.14" />
+        </svg>
+      );
+    case "special":
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <line x1="17" y1="12" x2="27" y2="22" stroke="#c99400" strokeWidth="3" strokeLinecap="round" />
+          <line x1="27" y1="12" x2="17" y2="22" stroke="#c99400" strokeWidth="3" strokeLinecap="round" />
+          <rect x="21" y="22" width="2" height="8" fill="#0b2733" />
+          <rect x="15" y="30" width="14" height="52" rx="6" fill="#f2c94c" stroke={outline} strokeWidth="1.2" />
+          <ellipse cx="22" cy="84" rx="11" ry="3" fill="#0b2733" opacity="0.14" />
+        </svg>
+      );
+    case "danger":
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <defs>
+            <clipPath id={clip}>
+              <rect x="15" y="20" width="14" height="62" rx="6" />
+            </clipPath>
+          </defs>
+          <g clipPath={`url(#${clip})`}>
+            <rect x="15" y="20" width="14" height="62" fill="#101820" />
+            <rect x="15" y="46" width="14" height="10" fill="#cf2323" />
+          </g>
+          <rect x="15" y="20" width="14" height="62" rx="6" fill="none" stroke={outline} strokeWidth="1.2" />
+          <ellipse cx="22" cy="84" rx="11" ry="3" fill="#0b2733" opacity="0.14" />
+        </svg>
+      );
+    case "safe":
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <defs>
+            <clipPath id={clip}>
+              <rect x="15" y="20" width="14" height="62" rx="6" />
+            </clipPath>
+          </defs>
+          <g clipPath={`url(#${clip})`}>
+            <rect x="15" y="20" width="3.5" height="62" fill="#cf2323" />
+            <rect x="18.5" y="20" width="3.5" height="62" fill="#ffffff" />
+            <rect x="22" y="20" width="3.5" height="62" fill="#cf2323" />
+            <rect x="25.5" y="20" width="3.5" height="62" fill="#ffffff" />
+          </g>
+          <rect x="15" y="20" width="14" height="62" rx="6" fill="none" stroke={outline} strokeWidth="1.2" />
+          <ellipse cx="22" cy="84" rx="11" ry="3" fill="#0b2733" opacity="0.14" />
+        </svg>
+      );
+    case "stang":
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <rect x="21" y="12" width="3" height="70" fill="#46626e" />
+          <rect x="12" y="12" width="9" height="7" fill="#46626e" />
+          <ellipse cx="22.5" cy="84" rx="8" ry="2.4" fill="#0b2733" opacity="0.12" />
+        </svg>
+      );
+    case "varde":
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <defs>
+            <clipPath id={clip}>
+              <polygon points="15,42 29,42 35,80 9,80" />
+            </clipPath>
+          </defs>
+          <rect x="20.5" y="18" width="3" height="24" fill="#46626e" />
+          <rect x="11.5" y="18" width="9" height="6.5" fill="#46626e" />
+          <rect x="7" y="38" width="30" height="4" rx="1" fill="#46626e" />
+          <g clipPath={`url(#${clip})`}>
+            <rect x="8" y="40" width="28" height="42" fill="#46626e" />
+            <rect x="8" y="57" width="28" height="8" fill="#eef2f0" />
+          </g>
+          <polygon points="15,42 29,42 35,80 9,80" fill="none" stroke="rgba(6,25,35,0.3)" strokeWidth="1" strokeLinejoin="round" />
+          <ellipse cx="22" cy="83" rx="13" ry="2.8" fill="#0b2733" opacity="0.12" />
+        </svg>
+      );
+    case "bake":
+      return (
+        <svg viewBox={base} className="sea-mark-svg" aria-hidden="true">
+          <g stroke="#46626e" strokeWidth="1.7" fill="none" strokeLinecap="round">
+            <line x1="10" y1="20" x2="10" y2="44" />
+            <line x1="34" y1="20" x2="34" y2="44" />
+            <line x1="10" y1="21" x2="34" y2="21" />
+            <line x1="10" y1="25" x2="34" y2="25" />
+            <line x1="10" y1="29" x2="34" y2="29" />
+            <line x1="10" y1="33" x2="34" y2="33" />
+            <line x1="10" y1="37" x2="34" y2="37" />
+            <line x1="10" y1="41" x2="34" y2="41" />
+            <line x1="34" y1="25" x2="40" y2="25" />
+            <line x1="34" y1="29" x2="40" y2="29" />
+            <line x1="12" y1="44" x2="6" y2="82" strokeWidth="2.3" />
+            <line x1="32" y1="44" x2="38" y2="82" strokeWidth="2.3" />
+            <line x1="22" y1="44" x2="22" y2="82" strokeWidth="2.3" />
+          </g>
+          <ellipse cx="22" cy="84" rx="14" ry="2.6" fill="#0b2733" opacity="0.1" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function SeaLedDirection() {
+  return (
+    <svg viewBox="0 0 64 168" className="sea-mark-led" aria-hidden="true">
+      <path
+        d="M32 8 C40 18 40 34 37 56 L27 56 C24 34 24 18 32 8 Z"
+        fill="#d3dbe0"
+        stroke="#0b2733"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M29 24 Q32 18 35 24 L35 38 L29 38 Z" fill="#2f80b8" />
+      <line x1="32" y1="58" x2="32" y2="106" stroke="rgba(6,25,35,0.45)" strokeWidth="2" strokeDasharray="4 5" />
+      <polygon
+        points="32,104 46,126 39,126 39,148 25,148 25,126 18,126"
+        fill="#ffffff"
+        stroke="#0b2733"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="136" r="7" fill="#cf2323" />
+      <circle cx="52" cy="136" r="7" fill="#138a45" />
+    </svg>
+  );
+}
 
 type CameraPadding = {
   top: number;
@@ -222,8 +411,8 @@ const UI_TEXT = {
         ],
       },
     ],
-    unlockNorth: "Fri retning",
-    fixNorth: "Lås til nord",
+    lockedNorth: "Låst til nord",
+    followingCourse: "Følger kurs",
     returnToLocation: "Gå til GPS-posisjon",
     myLocation: "Min posisjon",
     settings: "Innstillinger",
@@ -247,67 +436,126 @@ const UI_TEXT = {
     closeSeaMarks: "Lukk sjømerker",
     seaMarksTitle: "Sjømerker",
     seaMarksSubtitle: "Norge bruker IALA region A.",
-    seaMarksSource: "Kilde: Kystverket",
-    seaMarksList: [
-      {
-        title: "Babord lateralmerke",
-        description: "Rødt merke.",
-        detail: "Holdes på babord side i merkets hovedretning.",
-        className: "port",
-      },
-      {
-        title: "Styrbord lateralmerke",
-        description: "Grønt merke.",
-        detail: "Holdes på styrbord side i merkets hovedretning.",
-        className: "starboard",
-      },
+    seaMarksSource: "Kilde: Kystverket – Fyr, lykter og sjømerker",
+    seaMarksIntro:
+      "Farge og form viser typen. Lyssymbolet markerer lyskarakteren du ser om natta. Refleks hjelper deg å finne merket i lyskaster.",
+    seaMarksColorLabel: "Farge",
+    seaMarksReflexLabel: "Refleks",
+    seaMarksGroupCardinal: "Kardinalmerker",
+    seaMarksGroupCardinalIntro:
+      "Trygt farvann ligger i himmelretningen merket peker mot. Alltid svart/gult, alltid hvitt lys.",
+    seaMarksGroupLateral: "Lateralmerker (sidemerker)",
+    seaMarksGroupLateralIntro:
+      "Med hovedretningen (normalt inn mot havn): rødt på babord (venstre), grønt på styrbord (høyre).",
+    seaMarksGroupOther: "Andre flytende merker",
+    seaMarksGroupFixed: "Faste merker",
+    seaMarksGroupFixedIntro:
+      "Rundt 12 000 bunnfaste merker uten lys, ofte med refleks. Tre hovedtyper. Viser til begge sider (eller hvit krekse) = farbar led på begge sider.",
+    seaMarksCardinal: [
       {
         title: "Nord kardinalmerke",
-        description: "Svart over gult.",
+        color: "Svart over gult",
+        reflex: "Blått over gult",
+        light: "Q W",
+        lightVariant: "white",
         detail: "Trygt farvann ligger nord for merket.",
         className: "north",
       },
       {
-        title: "Sør kardinalmerke",
-        description: "Gult over svart.",
-        detail: "Trygt farvann ligger sør for merket.",
-        className: "south",
-      },
-      {
         title: "Øst kardinalmerke",
-        description: "Svart med gult belte.",
+        color: "Svart med ett gult belte",
+        reflex: "To blå bånd",
+        light: "Q(3) W 10s",
+        lightVariant: "white",
         detail: "Trygt farvann ligger øst for merket.",
         className: "east",
       },
       {
+        title: "Sør kardinalmerke",
+        color: "Gult over svart",
+        reflex: "Gult over blått",
+        light: "Q(6)+LFl W 15s",
+        lightVariant: "white",
+        detail: "Trygt farvann ligger sør for merket.",
+        className: "south",
+      },
+      {
         title: "Vest kardinalmerke",
-        description: "Gult med svart belte.",
+        color: "Gult med ett svart belte",
+        reflex: "To gule bånd",
+        light: "Q(9) W 15s",
+        lightVariant: "white",
         detail: "Trygt farvann ligger vest for merket.",
         className: "west",
       },
+    ] satisfies SeaMark[],
+    seaMarksLateral: [
+      {
+        title: "Babord",
+        color: "Rød",
+        reflex: "Rød",
+        light: "Rødt lys",
+        lightVariant: "red",
+        detail: "Hold på babord (venstre) side.",
+        className: "port",
+      },
+      {
+        title: "Styrbord",
+        color: "Grønn",
+        reflex: "Grønn",
+        light: "Grønt lys",
+        lightVariant: "green",
+        detail: "Hold på styrbord (høyre) side.",
+        className: "starboard",
+      },
+    ] satisfies SeaMark[],
+    seaMarksOther: [
       {
         title: "Spesialmerke",
-        description: "Gult merke.",
-        detail: "Brukes for særskilte områder, ofte med begrensninger.",
+        color: "Gul, gult X-toppmerke",
+        reflex: "Gul",
+        light: "Fl(4) Y",
+        lightVariant: "yellow",
+        detail: "Særskilt område – f.eks. badeplass, kabel eller oppdrett.",
         className: "special",
       },
       {
-        title: "Frittliggende grunne/fare",
-        description: "Svart med røde belter.",
-        detail: "Farvannet rundt er seilbart, men fare finnes ved merket.",
+        title: "Frittliggende grunne",
+        color: "Svart med røde belter",
+        reflex: "Blått over rødt",
+        light: "Fl(2) W",
+        lightVariant: "white",
+        detail: "Fare rett ved merket – seilbart rundt.",
         className: "danger",
       },
       {
         title: "Senterledsmerke",
-        description: "Røde og hvite vertikale striper.",
-        detail: "Markerer trygt farvann eller midt i leden.",
+        color: "Røde/hvite loddrette striper",
+        reflex: "Rødt over hvitt",
+        light: "Iso W / LFl W",
+        lightVariant: "white",
+        detail: "Trygt farvann rundt – midt i leden.",
         className: "safe",
       },
+    ] satisfies SeaMark[],
+    seaMarksFixed: [
       {
-        title: "Fast merke",
-        description: "Stang, varde eller båke.",
-        detail: "Viser peker normalt mot sikkert farvann.",
-        className: "fixed",
+        title: "Stang",
+        detail:
+          "Jernstang med viser eller toppmerke/krekse, oftest med refleks. Står på grunner og tørrfall. Vanligste faste merket.",
+        className: "stang",
+      },
+      {
+        title: "Varde",
+        detail:
+          "Steinvarde eller murt dagmerke på holme eller skjær, ofte med stang og viser på toppen. Holdepunkt mot himmelen.",
+        className: "varde",
+      },
+      {
+        title: "Båke",
+        detail:
+          "Større dagmerke i tre eller stål – ofte gittertårn på bukk. Satt opp så konturen synes mot himmelen. Uten lys.",
+        className: "bake",
       },
     ] satisfies SeaMark[],
     beachAreas: "Badeplasser",
@@ -444,8 +692,8 @@ const UI_TEXT = {
         ],
       },
     ],
-    unlockNorth: "Free rotation",
-    fixNorth: "Lock to north",
+    lockedNorth: "Locked to north",
+    followingCourse: "Following course",
     returnToLocation: "Return to GPS location",
     myLocation: "My location",
     settings: "Settings",
@@ -469,67 +717,126 @@ const UI_TEXT = {
     closeSeaMarks: "Close sea marks",
     seaMarksTitle: "Sea marks",
     seaMarksSubtitle: "Norway uses IALA region A.",
-    seaMarksSource: "Source: Kystverket",
-    seaMarksList: [
-      {
-        title: "Port lateral mark",
-        description: "Red mark.",
-        detail: "Kept to port in the main direction of buoyage.",
-        className: "port",
-      },
-      {
-        title: "Starboard lateral mark",
-        description: "Green mark.",
-        detail: "Kept to starboard in the main direction of buoyage.",
-        className: "starboard",
-      },
+    seaMarksSource: "Source: Kystverket – lighthouses, lights and sea marks",
+    seaMarksIntro:
+      "Colour and shape show the type. The light symbol marks the light character you see at night. Reflex helps you find the mark with a spotlight.",
+    seaMarksColorLabel: "Colour",
+    seaMarksReflexLabel: "Reflex",
+    seaMarksGroupCardinal: "Cardinal marks",
+    seaMarksGroupCardinalIntro:
+      "Safe water lies in the compass direction the mark points to. Always black/yellow, always a white light.",
+    seaMarksGroupLateral: "Lateral marks",
+    seaMarksGroupLateralIntro:
+      "With the main direction of buoyage (normally into harbour): red to port (left), green to starboard (right).",
+    seaMarksGroupOther: "Other floating marks",
+    seaMarksGroupFixed: "Fixed marks",
+    seaMarksGroupFixedIntro:
+      "Around 12,000 fixed unlit marks, often with reflex. Three main types. Pointers to both sides (or a white topmark) means navigable water on both sides.",
+    seaMarksCardinal: [
       {
         title: "North cardinal mark",
-        description: "Black over yellow.",
+        color: "Black over yellow",
+        reflex: "Blue over yellow",
+        light: "Q W",
+        lightVariant: "white",
         detail: "Safe water is north of the mark.",
         className: "north",
       },
       {
-        title: "South cardinal mark",
-        description: "Yellow over black.",
-        detail: "Safe water is south of the mark.",
-        className: "south",
-      },
-      {
         title: "East cardinal mark",
-        description: "Black with a yellow band.",
+        color: "Black with one yellow band",
+        reflex: "Two blue bands",
+        light: "Q(3) W 10s",
+        lightVariant: "white",
         detail: "Safe water is east of the mark.",
         className: "east",
       },
       {
+        title: "South cardinal mark",
+        color: "Yellow over black",
+        reflex: "Yellow over blue",
+        light: "Q(6)+LFl W 15s",
+        lightVariant: "white",
+        detail: "Safe water is south of the mark.",
+        className: "south",
+      },
+      {
         title: "West cardinal mark",
-        description: "Yellow with a black band.",
+        color: "Yellow with one black band",
+        reflex: "Two yellow bands",
+        light: "Q(9) W 15s",
+        lightVariant: "white",
         detail: "Safe water is west of the mark.",
         className: "west",
       },
+    ] satisfies SeaMark[],
+    seaMarksLateral: [
+      {
+        title: "Port",
+        color: "Red",
+        reflex: "Red",
+        light: "Red light",
+        lightVariant: "red",
+        detail: "Keep to port (left) side.",
+        className: "port",
+      },
+      {
+        title: "Starboard",
+        color: "Green",
+        reflex: "Green",
+        light: "Green light",
+        lightVariant: "green",
+        detail: "Keep to starboard (right) side.",
+        className: "starboard",
+      },
+    ] satisfies SeaMark[],
+    seaMarksOther: [
       {
         title: "Special mark",
-        description: "Yellow mark.",
-        detail: "Used for special areas, often with restrictions.",
+        color: "Yellow, yellow X topmark",
+        reflex: "Yellow",
+        light: "Fl(4) Y",
+        lightVariant: "yellow",
+        detail: "Special area – e.g. bathing, cable or aquaculture.",
         className: "special",
       },
       {
         title: "Isolated danger mark",
-        description: "Black with red bands.",
-        detail: "Navigable water around the mark, but danger at the mark.",
+        color: "Black with red bands",
+        reflex: "Blue over red",
+        light: "Fl(2) W",
+        lightVariant: "white",
+        detail: "Danger at the mark – navigable around it.",
         className: "danger",
       },
       {
         title: "Safe water mark",
-        description: "Red and white vertical stripes.",
-        detail: "Marks safe water or centre of fairway.",
+        color: "Red/white vertical stripes",
+        reflex: "Red over white",
+        light: "Iso W / LFl W",
+        lightVariant: "white",
+        detail: "Safe water around – mid-channel.",
         className: "safe",
       },
+    ] satisfies SeaMark[],
+    seaMarksFixed: [
       {
-        title: "Fixed mark",
-        description: "Pole, cairn or beacon.",
-        detail: "The pointer normally points toward safe water.",
-        className: "fixed",
+        title: "Pole (stang)",
+        detail:
+          "Iron pole with a pointer or topmark, usually with reflex. Stands on shoals and drying rocks. The most common fixed mark.",
+        className: "stang",
+      },
+      {
+        title: "Cairn (varde)",
+        detail:
+          "Stone cairn or masonry daymark on an islet or skerry, often with a pole and pointer on top. A landmark against the sky.",
+        className: "varde",
+      },
+      {
+        title: "Beacon (båke)",
+        detail:
+          "Larger daymark in wood or steel – often a lattice tower on legs. Placed so its outline shows against the sky. Unlit.",
+        className: "bake",
       },
     ] satisfies SeaMark[],
     beachAreas: "Bathing areas",
@@ -3361,7 +3668,7 @@ function NavigationApp() {
           <button
             type="button"
             className={
-              followingLocation && northUp
+              followingLocation && !northUp
                 ? "location-mode-button active"
                 : "location-mode-button"
             }
@@ -3369,8 +3676,8 @@ function NavigationApp() {
             title={
               followingLocation
                 ? northUp
-                  ? text.unlockNorth
-                  : text.fixNorth
+                  ? text.lockedNorth
+                  : text.followingCourse
                 : text.returnToLocation
             }
           >
@@ -3388,8 +3695,8 @@ function NavigationApp() {
             <span>
               {followingLocation
                 ? northUp
-                  ? text.unlockNorth
-                  : text.fixNorth
+                  ? text.lockedNorth
+                  : text.followingCourse
                 : text.myLocation}
             </span>
           </button>
@@ -3605,29 +3912,171 @@ function NavigationApp() {
             </button>
           </div>
 
-          <div className="sea-marks-grid">
-            {text.seaMarksList.map((mark) => (
-              <article className="sea-mark-card" key={mark.title}>
-                <div className={`sea-mark-symbol ${mark.className}`} aria-hidden="true">
-                  <span />
-                </div>
-                <div>
-                  <strong>{mark.title}</strong>
-                  <span>{mark.description}</span>
-                  <p>{mark.detail}</p>
-                </div>
-              </article>
-            ))}
-          </div>
+          <div className="sea-marks-scroll">
+            <p className="sea-marks-note">
+              <Lightbulb size={15} aria-hidden="true" />
+              <span>{text.seaMarksIntro}</span>
+            </p>
 
-          <a
-            className="sea-marks-source"
-            href="https://www.kystverket.no/navigasjonstjenester/sjomerker-og-navigasjonsinstallasjoner/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {text.seaMarksSource}
-          </a>
+            <div className="sea-marks-group-head">
+              <Compass size={16} aria-hidden="true" />
+              <strong>{text.seaMarksGroupCardinal}</strong>
+              <span className="sea-marks-rule" />
+            </div>
+            <p className="sea-marks-group-intro">{text.seaMarksGroupCardinalIntro}</p>
+            <div className="sea-marks-grid">
+              {text.seaMarksCardinal.map((mark) => (
+                <article className="sea-mark-card" key={mark.title}>
+                  <div className="sea-mark-symbol">
+                    <SeaMarkSymbol type={mark.className} />
+                  </div>
+                  <div>
+                    <strong>{mark.title}</strong>
+                    {mark.color && (
+                      <div className="sea-mark-meta">
+                        <span>{text.seaMarksColorLabel}</span>
+                        {mark.color}
+                      </div>
+                    )}
+                    {mark.reflex && (
+                      <div className="sea-mark-meta">
+                        <span>{text.seaMarksReflexLabel}</span>
+                        {mark.reflex}
+                      </div>
+                    )}
+                    <p>{mark.detail}</p>
+                    {mark.light && (
+                      <span className={`sea-mark-light sea-mark-light-${mark.lightVariant ?? "white"}`}>
+                        <Lightbulb size={13} aria-hidden="true" />
+                        {mark.light}
+                      </span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="sea-marks-group-head">
+              <ArrowLeftRight size={16} aria-hidden="true" />
+              <strong>{text.seaMarksGroupLateral}</strong>
+              <span className="sea-marks-rule" />
+            </div>
+            <p className="sea-marks-group-intro">{text.seaMarksGroupLateralIntro}</p>
+            <div className="sea-marks-lateral">
+              {text.seaMarksLateral[0] && (
+                <article className="sea-mark-lateral-card">
+                  <div className="sea-mark-symbol">
+                    <SeaMarkSymbol type={text.seaMarksLateral[0].className} />
+                  </div>
+                  <strong>{text.seaMarksLateral[0].title}</strong>
+                  <div className="sea-mark-meta">
+                    <span>{text.seaMarksColorLabel}</span>
+                    {text.seaMarksLateral[0].color}
+                  </div>
+                  <div className="sea-mark-meta">
+                    <span>{text.seaMarksReflexLabel}</span>
+                    {text.seaMarksLateral[0].reflex}
+                  </div>
+                  <p>{text.seaMarksLateral[0].detail}</p>
+                  <span className="sea-mark-light sea-mark-light-red">
+                    <Lightbulb size={13} aria-hidden="true" />
+                    {text.seaMarksLateral[0].light}
+                  </span>
+                </article>
+              )}
+              <div className="sea-mark-led-wrap">
+                <SeaLedDirection />
+              </div>
+              {text.seaMarksLateral[1] && (
+                <article className="sea-mark-lateral-card">
+                  <div className="sea-mark-symbol">
+                    <SeaMarkSymbol type={text.seaMarksLateral[1].className} />
+                  </div>
+                  <strong>{text.seaMarksLateral[1].title}</strong>
+                  <div className="sea-mark-meta">
+                    <span>{text.seaMarksColorLabel}</span>
+                    {text.seaMarksLateral[1].color}
+                  </div>
+                  <div className="sea-mark-meta">
+                    <span>{text.seaMarksReflexLabel}</span>
+                    {text.seaMarksLateral[1].reflex}
+                  </div>
+                  <p>{text.seaMarksLateral[1].detail}</p>
+                  <span className="sea-mark-light sea-mark-light-green">
+                    <Lightbulb size={13} aria-hidden="true" />
+                    {text.seaMarksLateral[1].light}
+                  </span>
+                </article>
+              )}
+            </div>
+
+            <div className="sea-marks-group-head">
+              <AlertTriangle size={16} aria-hidden="true" />
+              <strong>{text.seaMarksGroupOther}</strong>
+              <span className="sea-marks-rule" />
+            </div>
+            <div className="sea-marks-grid">
+              {text.seaMarksOther.map((mark) => (
+                <article className="sea-mark-card" key={mark.title}>
+                  <div className="sea-mark-symbol">
+                    <SeaMarkSymbol type={mark.className} />
+                  </div>
+                  <div>
+                    <strong>{mark.title}</strong>
+                    {mark.color && (
+                      <div className="sea-mark-meta">
+                        <span>{text.seaMarksColorLabel}</span>
+                        {mark.color}
+                      </div>
+                    )}
+                    {mark.reflex && (
+                      <div className="sea-mark-meta">
+                        <span>{text.seaMarksReflexLabel}</span>
+                        {mark.reflex}
+                      </div>
+                    )}
+                    <p>{mark.detail}</p>
+                    {mark.light && (
+                      <span className={`sea-mark-light sea-mark-light-${mark.lightVariant ?? "white"}`}>
+                        <Lightbulb size={13} aria-hidden="true" />
+                        {mark.light}
+                      </span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="sea-marks-group-head">
+              <MapPin size={16} aria-hidden="true" />
+              <strong>{text.seaMarksGroupFixed}</strong>
+              <span className="sea-marks-rule" />
+            </div>
+            <p className="sea-marks-group-intro">{text.seaMarksGroupFixedIntro}</p>
+            <div className="sea-marks-grid">
+              {text.seaMarksFixed.map((mark) => (
+                <article className="sea-mark-card" key={mark.title}>
+                  <div className="sea-mark-symbol">
+                    <SeaMarkSymbol type={mark.className} />
+                  </div>
+                  <div>
+                    <strong>{mark.title}</strong>
+                    <p>{mark.detail}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <a
+              className="sea-marks-source"
+              href="https://www.kystverket.no/sjovegen/fyr-lykter-og-sjomerker/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink size={15} aria-hidden="true" />
+              {text.seaMarksSource}
+            </a>
+          </div>
         </section>
       )}
 

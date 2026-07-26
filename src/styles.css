@@ -4716,8 +4716,8 @@ button {
     border-left: 1px solid rgba(70, 98, 110, 0.18);
   }
 
-  /* Behold største font-størrelse for verdiene (samme som ikke-komprimert
-     visning) selv i det smale liggende panelet, likt for alle felt. */
+  /* Fast størrelse i stedet for clamp-en over, slik at verdiene holder seg
+     lesbare i det smale liggende panelet — lik for alle felt. */
   .readout-panel .instrument-pair strong {
     font-size: 1.3365rem;
   }
@@ -5065,6 +5065,24 @@ button {
 
 .popup-quality svg {
   flex: none;
+}
+
+.popup-water-temp {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.popup-water-temp svg {
+  flex: none;
+  color: rgb(var(--popup-accent));
+}
+
+.popup-water-temp strong {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .harbor-meta {

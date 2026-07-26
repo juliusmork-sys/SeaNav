@@ -73,7 +73,10 @@ function getSymbolCode(forecast: MetForecast) {
 }
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
-  response.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1800");
+  // MET setter selv Expires ~30 min fram og oppdaterer modellen sjeldnere enn
+  // det. Kortere TTL her ga bare flere kall mot MET uten ferskere data, og
+  // deres vilkår ber oss vente til Expires før vi spør igjen.
+  response.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=3600");
 
   const latitude = parseNumber(request.query.lat);
   const longitude = parseNumber(request.query.lon);
@@ -115,6 +118,10 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       waveDirection: readNumber(oceanDetails, "sea_surface_wave_from_direction"),
       currentSpeed: readNumber(oceanDetails, "sea_water_speed"),
       currentDirection: readNumber(oceanDetails, "sea_water_to_direction"),
+      // Modellert overflatetemperatur. Ligger i samme svar som bølge og strøm,
+      // men mangler for innlandsvann utenfor havmodellens domene — da er
+      // feltet borte fra payloaden og readNumber gir null.
+      waterTemperature: readNumber(oceanDetails, "sea_water_temperature"),
       symbolCode,
       source: "MET Norway",
     });

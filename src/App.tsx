@@ -3,6 +3,11 @@ import type { ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import maplibregl, { Map } from "maplibre-gl";
 import {
+  booleanSetting,
+  enumSetting,
+  usePersistedState,
+} from "./usePersistedState";
+import {
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
@@ -104,6 +109,7 @@ type WeatherState = {
   waveDirection: number | null;
   currentSpeed: number | null;
   currentDirection: number | null;
+  waterTemperature: number | null;
   symbolCode: string | null;
 };
 
@@ -605,6 +611,9 @@ const UI_TEXT = {
     harborTypeMarina: "Marina",
     harborTypeHarbour: "Havn",
     beachBadge: "Badeplass",
+    waterTemperature: "Vanntemperatur",
+    waterTemperatureLoading: "Henter …",
+    waterTemperatureUnavailable: "Ikke tilgjengelig",
     waterQualityLabels: {
       good: "God vannkvalitet",
       fair: "Mindre god vannkvalitet",
@@ -890,6 +899,9 @@ const UI_TEXT = {
     harborTypeMarina: "Marina",
     harborTypeHarbour: "Harbour",
     beachBadge: "Bathing spot",
+    waterTemperature: "Water temperature",
+    waterTemperatureLoading: "Loading …",
+    waterTemperatureUnavailable: "Not available",
     waterQualityLabels: {
       good: "Good water quality",
       fair: "Fair water quality",
@@ -956,6 +968,7 @@ const DEFAULT_WEATHER_STATE: WeatherState = {
   waveDirection: null,
   currentSpeed: null,
   currentDirection: null,
+  waterTemperature: null,
   symbolCode: null,
 };
 const EMPTY_HARBOR_FEATURE_COLLECTION: HarborState["featureCollection"] = {
@@ -1705,6 +1718,9 @@ const BEACH_ICON_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" fill="no
   (definition) => `<path d="${definition}" />`,
 ).join("")}</svg>`;
 
+// Termometer (Lucide thermometer) foran sjøtemperaturen i badeplass-popup.
+const WATER_TEMP_ICON_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4v10.54a4 4 0 1 1 -4 0V4a2 2 0 0 1 4 0z" /></svg>`;
+
 // Fylt dråpe (Tabler ti-droplet), farget etter vannkvalitet i popup-linjen.
 function beachQualityDropletSvg(color: string) {
   return `<svg viewBox="0 0 24 24" width="15" height="15" fill="${color}" aria-hidden="true"><path d="M6.8 11a6 6 0 1 0 10.396 0l-5.197 -8l-5.2 8z" /></svg>`;
@@ -1946,9 +1962,14 @@ async function fetchDistanceToLand(latitude: number, longitude: number) {
   return payload.distanceMeters;
 }
 
-async function fetchWeather(latitude: number, longitude: number) {
+async function fetchWeather(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+) {
   const response = await fetch(
     `/api/weather?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`,
+    { signal },
   );
 
   if (!response.ok) {
@@ -1968,6 +1989,7 @@ async function fetchWeather(latitude: number, longitude: number) {
     waveDirection: valueOrNull(payload.waveDirection),
     currentSpeed: valueOrNull(payload.currentSpeed),
     currentDirection: valueOrNull(payload.currentDirection),
+    waterTemperature: valueOrNull(payload.waterTemperature),
     symbolCode: typeof payload.symbolCode === "string" ? payload.symbolCode : null,
   } satisfies WeatherState;
 }
@@ -2250,43 +2272,41 @@ function NavigationApp() {
   const [beaches, setBeaches] = useState<BeachState>(DEFAULT_BEACH_STATE);
   const [harbors, setHarbors] = useState<HarborState>(DEFAULT_HARBOR_STATE);
   const [weather, setWeather] = useState<WeatherState>(DEFAULT_WEATHER_STATE);
-  const [language, setLanguage] = useState<Language>(() => {
-    if (typeof window === "undefined") return "no";
-    return window.localStorage.getItem("seanav-language") === "en"
-      ? "en"
-      : "no";
-  });
+  const [language, setLanguage] = usePersistedState(
+    "seanav-language",
+    enumSetting<Language>("no", ["no", "en"]),
+  );
   const [tracking, setTracking] = useState(false);
   const [gpsRestarting, setGpsRestarting] = useState(false);
   const [followingLocation, setFollowingLocation] = useState(true);
   const [northUp, setNorthUp] = useState(true);
   const [mapBearing, setMapBearing] = useState(0);
-  const [chartVisible, setChartVisible] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("seanav-chart-visible") !== "off";
-  });
-  const [harborsVisible, setHarborsVisible] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("seanav-harbors-visible") === "on";
-  });
-  const [beachDisplayMode, setBeachDisplayMode] = useState<BeachDisplayMode>(
-    () => {
-      if (typeof window === "undefined") return "off";
-      const stored = window.localStorage.getItem("seanav-beach-display-mode");
-      return stored === "icons" || stored === "areas" ? stored : "off";
-    },
+  // Lagene finnes først etter at kartstilen har lastet. Effektene som styrer
+  // synlighet må derfor kjøre på nytt når kartet er klart, ellers går en
+  // gjenopprettet innstilling tapt fordi laget ikke fantes da effekten kjørte.
+  const [mapReady, setMapReady] = useState(false);
+  const [chartVisible, setChartVisible] = usePersistedState(
+    "seanav-chart-visible",
+    booleanSetting(true),
   );
-  const [baseMap, setBaseMap] = useState<BaseMap>(() => {
-    if (typeof window === "undefined") return "map";
-    const stored = window.localStorage.getItem("seanav-base-map");
-    return stored === "satellite" || stored === "off" ? stored : "map";
-  });
+  const [harborsVisible, setHarborsVisible] = usePersistedState(
+    "seanav-harbors-visible",
+    booleanSetting(false),
+  );
+  const [beachDisplayMode, setBeachDisplayMode] = usePersistedState(
+    "seanav-beach-display-mode",
+    enumSetting<BeachDisplayMode>("off", ["off", "icons", "areas"]),
+  );
+  const [baseMap, setBaseMap] = usePersistedState(
+    "seanav-base-map",
+    enumSetting<BaseMap>("map", ["map", "satellite", "off"]),
+  );
   const [displayOpen, setDisplayOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
-  const [weatherOpen, setWeatherOpen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("seanav-weather-open") === "on";
-  });
+  const [weatherOpen, setWeatherOpen] = usePersistedState(
+    "seanav-weather-open",
+    booleanSetting(false),
+  );
   const [isPortrait, setIsPortrait] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 820px) and (orientation: portrait)").matches;
@@ -2297,56 +2317,60 @@ function NavigationApp() {
   const [gpsIssue, setGpsIssue] = useState<GpsIssue | null>(null);
   const [dismissedGpsIssueCode, setDismissedGpsIssueCode] =
     useState<GpsIssueCode | null>(null);
-  const [showOwnship, setShowOwnship] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("seanav-show-ownship") !== "off";
-  });
-  const [showAccuracyRing, setShowAccuracyRing] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("seanav-show-accuracy-ring") !== "off";
-  });
-  const [showHeadingLine, setShowHeadingLine] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("seanav-show-heading-line") !== "off";
-  });
-  const [showNotice, setShowNotice] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("seanav-show-notice") !== "off";
-  });
-  const [alertSoundEnabled, setAlertSoundEnabled] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem("seanav-alert-sound") !== "muted";
-  });
-  const [showPrecisePosition, setShowPrecisePosition] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("seanav-show-precise-position") === "on";
-  });
+  const [showOwnship, setShowOwnship] = usePersistedState(
+    "seanav-show-ownship",
+    booleanSetting(true),
+  );
+  const [showAccuracyRing, setShowAccuracyRing] = usePersistedState(
+    "seanav-show-accuracy-ring",
+    booleanSetting(true),
+  );
+  const [showHeadingLine, setShowHeadingLine] = usePersistedState(
+    "seanav-show-heading-line",
+    booleanSetting(true),
+  );
+  const [showNotice, setShowNotice] = usePersistedState(
+    "seanav-show-notice",
+    booleanSetting(true),
+  );
+  // Egen koding ("enabled"/"muted") av historiske grunner — må beholdes for
+  // ikke å nullstille lyd-valget til brukere som allerede har lagret det.
+  const [alertSoundEnabled, setAlertSoundEnabled] = usePersistedState(
+    "seanav-alert-sound",
+    {
+      decode: (stored) => stored !== "muted",
+      encode: (value) => (value ? "enabled" : "muted"),
+    },
+  );
+  const [showPrecisePosition, setShowPrecisePosition] = usePersistedState(
+    "seanav-show-precise-position",
+    booleanSetting(false),
+  );
   const [dismissedAlertKey, setDismissedAlertKey] = useState<string | null>(null);
-  const [speedUnit, setSpeedUnit] = useState<SpeedUnit>(() => {
-    if (typeof window === "undefined") return "kn";
-    return window.localStorage.getItem("seanav-speed-unit") === "kmh"
-      ? "kmh"
-      : "kn";
-  });
-  const [depthUnit, setDepthUnit] = useState<DepthUnit>(() => {
-    if (typeof window === "undefined") return "m";
-    return window.localStorage.getItem("seanav-depth-unit") === "ft"
-      ? "ft"
-      : "m";
-  });
-  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(() => {
-    if (typeof window === "undefined") return "metric";
-    return window.localStorage.getItem("seanav-distance-unit") === "nm"
-      ? "nm"
-      : "metric";
-  });
-  const [headingMode, setHeadingMode] = useState<HeadingMode>(() => {
-    if (typeof window === "undefined") return "full";
-    return window.localStorage.getItem("seanav-heading-mode") === "degrees"
-      ? "degrees"
-      : "full";
-  });
+  const [speedUnit, setSpeedUnit] = usePersistedState(
+    "seanav-speed-unit",
+    enumSetting<SpeedUnit>("kn", ["kn", "kmh"]),
+  );
+  const [depthUnit, setDepthUnit] = usePersistedState(
+    "seanav-depth-unit",
+    enumSetting<DepthUnit>("m", ["m", "ft"]),
+  );
+  const [distanceUnit, setDistanceUnit] = usePersistedState(
+    "seanav-distance-unit",
+    enumSetting<DistanceUnit>("metric", ["metric", "nm"]),
+  );
+  const [headingMode, setHeadingMode] = usePersistedState(
+    "seanav-heading-mode",
+    enumSetting<HeadingMode>("full", ["full", "degrees"]),
+  );
   const text = UI_TEXT[language];
+  // Kart-effekten kjører kun én gang (tomme deps), så `text` fanget i den
+  // fryser på språket appen startet med. Popup-ene bygges inne i den effekten
+  // og må derfor lese gjeldende tekst via denne ref-en i stedet.
+  const textRef = useRef(text);
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
   const beachesVisible = beachDisplayMode !== "off";
   const beachAreasVisible = beachDisplayMode === "areas";
   const beachLayerLabel =
@@ -2396,80 +2420,7 @@ function NavigationApp() {
 
   useEffect(() => {
     document.documentElement.lang = language === "no" ? "nb" : "en";
-    window.localStorage.setItem("seanav-language", language);
   }, [language]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-speed-unit", speedUnit);
-  }, [speedUnit]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-depth-unit", depthUnit);
-  }, [depthUnit]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-distance-unit", distanceUnit);
-  }, [distanceUnit]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-heading-mode", headingMode);
-  }, [headingMode]);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "seanav-alert-sound",
-      alertSoundEnabled ? "enabled" : "muted",
-    );
-  }, [alertSoundEnabled]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-chart-visible", chartVisible ? "on" : "off");
-  }, [chartVisible]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-harbors-visible", harborsVisible ? "on" : "off");
-  }, [harborsVisible]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-beach-display-mode", beachDisplayMode);
-  }, [beachDisplayMode]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-base-map", baseMap);
-  }, [baseMap]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-weather-open", weatherOpen ? "on" : "off");
-  }, [weatherOpen]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-show-ownship", showOwnship ? "on" : "off");
-  }, [showOwnship]);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "seanav-show-accuracy-ring",
-      showAccuracyRing ? "on" : "off",
-    );
-  }, [showAccuracyRing]);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "seanav-show-heading-line",
-      showHeadingLine ? "on" : "off",
-    );
-  }, [showHeadingLine]);
-
-  useEffect(() => {
-    window.localStorage.setItem("seanav-show-notice", showNotice ? "on" : "off");
-  }, [showNotice]);
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "seanav-show-precise-position",
-      showPrecisePosition ? "on" : "off",
-    );
-  }, [showPrecisePosition]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2740,7 +2691,7 @@ function NavigationApp() {
       }
       return next;
     });
-  }, [refreshHarbors]);
+  }, [refreshHarbors, setHarborsVisible]);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -3027,6 +2978,7 @@ function NavigationApp() {
         feature: maplibregl.MapGeoJSONFeature,
         lngLat: maplibregl.LngLat,
       ) => {
+        const text = textRef.current;
         const name = getBeachFeatureName(feature.properties);
         const qualityKey = getBeachQualityKey(feature.properties);
         const qualityRow = qualityKey
@@ -3040,12 +2992,42 @@ function NavigationApp() {
         })
           .setLngLat(lngLat)
           .setHTML(
-            `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span>${qualityRow}</div>`,
+            `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span>${qualityRow}<div class="popup-water-temp">${WATER_TEMP_ICON_SVG}<span>${escapePopupText(text.waterTemperature)}</span><strong data-water-temp aria-live="polite">${escapePopupText(text.waterTemperatureLoading)}</strong></div></div>`,
           )
           .addTo(map);
 
         selectMarker(feature);
-        popup.on("close", clearSelectedMarker);
+
+        // Sjøtemperaturen hentes etter at popup-en er åpen, ellers ville
+        // klikket henge på et nettverkskall. Avbrytes hvis brukeren lukker
+        // popup-en først, slik at vi ikke skriver til et fjernet DOM-tre.
+        const controller = new AbortController();
+        void (async () => {
+          let label: string;
+          try {
+            const weather = await fetchWeather(
+              lngLat.lat,
+              lngLat.lng,
+              controller.signal,
+            );
+            label =
+              weather.waterTemperature === null
+                ? textRef.current.waterTemperatureUnavailable
+                : formatWeatherValue(weather.waterTemperature, "°C");
+          } catch {
+            label = textRef.current.waterTemperatureUnavailable;
+          }
+          if (controller.signal.aborted) return;
+          const target = popup
+            .getElement()
+            ?.querySelector("[data-water-temp]");
+          if (target) target.textContent = label;
+        })();
+
+        popup.on("close", () => {
+          controller.abort();
+          clearSelectedMarker();
+        });
       };
       const showPointer = () => {
         map.getCanvas().style.cursor = "pointer";
@@ -3158,6 +3140,10 @@ function NavigationApp() {
           "line-width": 2.4,
         },
       });
+
+      // Nå finnes alle lagene — la synlighets-effektene kjøre på nytt slik at
+      // innstillinger lest fra localStorage faktisk blir tatt i bruk.
+      setMapReady(true);
     });
 
     const markerEl = document.createElement("div");
@@ -3200,6 +3186,7 @@ function NavigationApp() {
       map.off("move", syncMapBearing);
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
   }, []);
 
@@ -3242,7 +3229,7 @@ function NavigationApp() {
       "visibility",
       chartVisible ? "visible" : "none",
     );
-  }, [chartVisible]);
+  }, [chartVisible, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3250,7 +3237,7 @@ function NavigationApp() {
     const visibility = harborsVisible ? "visible" : "none";
     map.setLayoutProperty("harbor-marker-halo", "visibility", visibility);
     map.setLayoutProperty("harbor-marker", "visibility", visibility);
-  }, [harborsVisible]);
+  }, [harborsVisible, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3277,7 +3264,7 @@ function NavigationApp() {
       "visibility",
       baseMap === "satellite" ? "visible" : "none",
     );
-  }, [baseMap]);
+  }, [baseMap, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3290,7 +3277,7 @@ function NavigationApp() {
     map.setLayoutProperty("beach-area-fill", "visibility", areaVisibility);
     map.setLayoutProperty("beach-area-hatch", "visibility", areaVisibility);
     map.setLayoutProperty("beach-area-outline", "visibility", areaVisibility);
-  }, [beachAreasVisible, beachesVisible]);
+  }, [beachAreasVisible, beachesVisible, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3320,7 +3307,7 @@ function NavigationApp() {
     map.setLayoutProperty("accuracy-fill", "visibility", visibility);
     map.setLayoutProperty("accuracy-halo", "visibility", visibility);
     map.setLayoutProperty("accuracy-line", "visibility", visibility);
-  }, [showAccuracyRing]);
+  }, [showAccuracyRing, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3330,7 +3317,7 @@ function NavigationApp() {
       "visibility",
       showHeadingLine ? "visible" : "none",
     );
-  }, [showHeadingLine]);
+  }, [showHeadingLine, mapReady]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;

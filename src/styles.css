@@ -23,10 +23,142 @@
   --sea-ink: #0d2440;
   --sea-ink-muted: #52708c;
   --sea-hairline: #c9d7e5;
+
+  /* Bevegelse — én kilde til varighet og easing, slik at hele appen puster i
+     samme takt. Verdiene er holdt korte med vilje: dette er et navigasjonsverktøy
+     som brukes med én hånd i sjøgang, så animasjon skal bekrefte handlingen, ikke
+     forsinke den. Alt over ~260 ms begynner å oppleves som treghet. */
+  --motion-instant: 90ms;
+  --motion-fast: 130ms;
+  --motion-base: 170ms;
+  --motion-slow: 240ms;
+  /* Dekomprimerende utgang: rask start, mykt stopp. Standard for alt som åpner. */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* Speilvendt, for alt som lukker — lukking skal føles kortere enn åpning. */
+  --ease-in: cubic-bezier(0.55, 0, 0.85, 0.3);
+  /* Litt mer karakter, brukt der noe skal fange blikket (varsler). */
+  --ease-emphasis: cubic-bezier(0.16, 0.9, 0.32, 1);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* === Bevegelsesprimitiver ===
+   Delte keyframes. Enter-animasjoner spiller av seg selv når noden settes inn i
+   DOM-en; exit krever at noden holdes montert litt lenger (se usePresence.ts) og
+   at `.is-exiting` legges på. Alt animerer bare `opacity` og `transform` — de to
+   egenskapene nettleseren kan kjøre uten layout/paint, som er det som holder
+   kartet flytende mens panelene beveger seg. */
+
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes motion-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Modaler: løftes noen piksler og skalerer nesten umerkelig opp. */
+@keyframes motion-pop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes motion-pop-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.99);
+  }
+}
+
+/* Skuffer og paneler som kommer fra bunnen. */
+@keyframes motion-rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes motion-rise-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+}
+
+/* Varsler og bobler som henger øverst: faller ned på plass. */
+@keyframes motion-drop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes motion-drop-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+/* Kort pust på en tallverdi som nettopp ble oppdatert. Ingen bevegelse — et tall
+   som hopper er vanskeligere å lese, og lesbarhet slår effekt på instrumenter. */
+@keyframes motion-value-settle {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Ventetilstand: dempet pulsering i stedet for en spinner, slik at layouten ikke
+   endrer seg når verdien kommer. */
+@keyframes motion-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 html,
@@ -540,7 +672,6 @@ button {
   padding: 9px 12px;
   border-radius: 8px;
   pointer-events: none;
-  transition: top 160ms ease;
 }
 
 /* Inne i .map-top-cluster (værboksen er åpen): normal flow, ikke egen posisjon. */
@@ -760,13 +891,21 @@ button {
   width: 246px;
   min-height: 52px;
   border-radius: 8px;
+  /* `width` er layout-utløsende og animeres over et WebGL-kart, men bredden er
+     overstyrt i seks ulike breakpoints med hver sin verdi — en transform-basert
+     avsløring ville måtte duplisere alle. Vi beholder bredden og holder den kort
+     i stedet, og lar innholdet fade separat slik at det ikke er tekst som klippes
+     mens boksen krymper. */
   transition:
-    width 180ms ease,
-    transform 180ms ease;
+    width var(--motion-base) var(--ease-out),
+    transform var(--motion-base) var(--ease-out);
 }
 
 .side-menu:not(.open) {
   width: 52px;
+  transition:
+    width var(--motion-fast) var(--ease-in),
+    transform var(--motion-fast) var(--ease-in);
 }
 
 .menu-toggle {
@@ -854,8 +993,8 @@ button {
   background: rgba(255, 255, 255, 0.08);
   cursor: pointer;
   transition:
-    background 140ms ease,
-    border-color 140ms ease;
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .toggle-row input::after {
@@ -866,7 +1005,11 @@ button {
   border-radius: 50%;
   content: "";
   background: #d9eef4;
-  transition: transform 140ms ease;
+  /* Knappen skal komme fram raskt og legge seg mykt inntil enden av sporet, slik
+     at det leses som at den er skjøvet på plass og ikke bare byttet posisjon. */
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
 }
 
 .toggle-row input:checked {
@@ -932,6 +1075,12 @@ button {
   border-radius: 50%;
   background: #f26d6d;
   box-shadow: 0 0 16px rgba(242, 109, 109, 0.8);
+  /* GPS-status kan skifte fram og tilbake i dårlig dekning. En kort overgang gjør
+     at fargeskiftet leses som en tilstandsendring i stedet for å blinke. Kort med
+     vilje: dette er et varselsignal, det skal ikke være behagelig å se på. */
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .status-dot.active {
@@ -1727,7 +1876,7 @@ button {
   height: 24px;
   flex: 0 0 auto;
   place-items: center;
-  transition: transform 220ms ease;
+  transition: transform var(--motion-slow) var(--ease-out);
 }
 
 .map-bearing-north {
@@ -1836,7 +1985,9 @@ button {
   width: 40px;
   height: 58px;
   transform-origin: 50% 50%;
-  transition: transform 260ms ease;
+  /* Kursendringen skal gli, ikke hoppe, men den må ikke ligge så langt bak GPS-en
+     at markøren peker feil vei. `--motion-slow` er øvre grense. */
+  transition: transform var(--motion-slow) var(--ease-out);
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.48));
 }
 
@@ -4725,11 +4876,11 @@ button {
 
 button {
   transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .readout-panel > .accuracy:hover,
@@ -5252,5 +5403,346 @@ button {
 
   .map-weather-card {
     width: min(360px, calc(100vw - 28px));
+  }
+}
+
+/* === Mikrointeraksjoner ===
+   Ligger etter alle responsive blokker av samme grunn som overlay-blokken under:
+   flere breakpoints setter egne bakgrunner og transformer på de samme knappene,
+   og en trykkbekreftelse som ikke vinner er verre enn ingen.
+
+   Premisset for hele blokken: appen brukes stående i båt, med våte hender eller
+   hansker, på en skjerm man knapt ser i sol. Et trykk må bekreftes i seg selv —
+   brukeren kan ikke stole på at han ser fargeendringen. Derfor er `:active` med
+   en liten nedskalering det viktigste her, ikke hover. */
+
+/* --- Trykkbekreftelse ---
+   `scale` framfor `translate`: knappene står i tette rader, og en forskyvning
+   ville se ut som at raden hopper. En nedskalering leses som at flaten gir etter
+   under fingeren. `--motion-instant` fordi bekreftelsen må komme før fingeren er
+   løftet, ellers rekker man ikke å se den. */
+.controls button:active,
+.panel-actions button:active,
+.embedded-controls button:active,
+.settings-actions button:active,
+.location-mode-button:active,
+.menu-toggle:active,
+.gps-alert-action:active,
+.marine-alert-close:active,
+.sea-marks-close:active,
+.readout-panel > .accuracy:active,
+.harbor-map-modal header button:active,
+.harbor-action-primary:active,
+.landing-install-cta:active,
+.landing-primary-cta:active,
+.landing-header-cta:active {
+  transform: scale(0.97);
+  transition-duration: var(--motion-instant);
+}
+
+/* Lenker som ser ut som knapper mangler `button`-overgangen over, så de må ha
+   sin egen. */
+.sea-marks-source,
+.harbor-action-secondary {
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-instant) var(--ease-out);
+}
+
+.sea-marks-source:active,
+.harbor-action-secondary:active {
+  transform: scale(0.97);
+}
+
+/* MapLibres egen lukkeknapp er ikke vår markup, men den er en knapp brukeren
+   treffer like ofte som våre egne. */
+.beach-popup .maplibregl-popup-close-button,
+.harbor-popup .maplibregl-popup-close-button {
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-instant) var(--ease-out);
+}
+
+.beach-popup .maplibregl-popup-close-button:active,
+.harbor-popup .maplibregl-popup-close-button:active {
+  transform: scale(0.9);
+}
+
+/* Instrumentfeltene i lesepanelet er store flater uten kant. En nedskalering av
+   hele feltet ville flytte tallet brukeren nettopp leste, så her holder det med
+   at bakgrunnen svarer — den er allerede dekket av `button`-overgangen. */
+.instrument-toggle:active,
+.speed-toggle:active {
+  transform: scale(0.99);
+  transition-duration: var(--motion-instant);
+}
+
+/* --- Hover på berøringsskjerm ---
+   På touch henger hover-tilstanden igjen på siste knapp som ble trykket helt til
+   noe annet berøres, og brukeren tror knappen fortsatt er valgt. Fargene kan ikke
+   bare nulles her — de er satt i flere temablokker over med ulike verdier — så vi
+   fjerner i stedet den delen av hover-utslaget som gjør at knappen ser *valgt* ut:
+   glødende kant og løft. `.active` røres ikke, den er reell tilstand.
+
+   `:active` overstyrer dette igjen (høyere spesifisitet lenger opp), så selve
+   trykket bekreftes fortsatt. */
+@media (hover: none) {
+  .controls button:hover:not(.active),
+  .panel-actions button:hover:not(.active),
+  .embedded-controls button:hover:not(.active),
+  .settings-actions button:hover:not(.active),
+  .location-mode-button:hover:not(.active),
+  .menu-toggle:hover,
+  .gps-alert-action:hover,
+  .marine-alert-close:hover,
+  .sea-marks-close:hover,
+  .readout-panel > .accuracy:hover {
+    box-shadow: none;
+  }
+
+  /* `:not(:active)` er nødvendig, ikke pynt: på touch er knappen både :hover og
+     :active i trykkøyeblikket, og denne regelen står lenger ned i fila enn
+     :active-regelen med samme spesifisitet. Uten unntaket vinner `transform: none`
+     og trykket på landingsknappene gir ingen bekreftelse. */
+  .landing-header-cta:hover:not(:active),
+  .landing-primary-cta:hover:not(:active) {
+    transform: none;
+  }
+
+  .sea-marks-source:hover {
+    text-decoration: none;
+  }
+}
+
+/* --- Valgt tilstand ---
+   Alltid montert, bare en klasse som skrus av og på, så dette må være
+   `transition` og ikke keyframes. Fargeskiftet fra gjennomsiktig til fylt er
+   stort; uten overgang leses det som at knappen ble byttet ut. */
+.controls button,
+.panel-actions button,
+.embedded-controls button,
+.settings-actions button,
+.location-mode-button {
+  transition:
+    background-color var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    color var(--motion-base) var(--ease-out),
+    transform var(--motion-instant) var(--ease-out);
+}
+
+/* --- Ventetilstander ---
+   Ingen spinner og ingen tom plass: teksten som allerede står der pulser dempet
+   videre. Da endres ikke layouten når verdien kommer, og brukeren mister aldri
+   av syne hva feltet gjelder. */
+.weather-card-metrics[aria-busy="true"] .weather-card-metric-value {
+  animation: motion-breathe 1.4s var(--ease-emphasis) infinite;
+}
+
+/* Sjøtemperaturen i badepopup-en hentes etter at kortet er åpnet, og skrives inn
+   i det samme elementet. `aria-busy` fjernes i App.tsx når svaret er der. */
+.popup-water-temp strong[aria-busy="true"] {
+  animation: motion-breathe 1.4s var(--ease-emphasis) infinite;
+}
+
+/* --- Oppdatert måleverdi ---
+   Kun der verdien kommer sjelden og asynkront (dybde og avstand til land, som
+   hentes over nett). Fart og kurs oppdateres på hver GPS-fiks og ville blinket
+   konstant — der slår lesbarhet effekt. Krever `key` i React for å spille av på
+   nytt, se App.tsx. */
+.instrument-value-settle {
+  animation: motion-value-settle var(--motion-slow) var(--ease-out) both;
+}
+
+/* --- Kartpopups ---
+   MapLibre skriver sin egen `transform` på `.maplibregl-popup` for å plassere
+   kortet, så vi animerer aldri wrapperen — bare innholdet inni. `transform-origin`
+   settes mot bunnen fordi kortet ligger over markøren: da vokser det ut av
+   markøren i stedet for ut av ingenting. */
+.harbor-popup-content,
+.beach-popup .popup-card {
+  animation: motion-pop-in var(--motion-base) var(--ease-out) both;
+  transform-origin: 50% 100%;
+}
+
+/* MapLibre snur ankeret når kortet ikke får plass over markøren. Da sitter
+   markøren over kortet, og opprinnelsespunktet må følge etter — ellers vokser
+   kortet vekk fra det brukeren trykket på. */
+.maplibregl-popup-anchor-top .harbor-popup-content,
+.maplibregl-popup-anchor-top-left .harbor-popup-content,
+.maplibregl-popup-anchor-top-right .harbor-popup-content,
+.maplibregl-popup-anchor-top .popup-card,
+.maplibregl-popup-anchor-top-left .popup-card,
+.maplibregl-popup-anchor-top-right .popup-card {
+  transform-origin: 50% 0;
+}
+
+/* --- Landingsside ---
+   Begge er betinget rendret, så enter-animasjonen spiller av seg selv ved
+   innsetting. Hintet er svar på et trykk og kommer nedenfra knappen; selve
+   install-knappen dukker opp når nettleseren melder at appen kan installeres,
+   uten at brukeren gjorde noe — derfor bare en rolig fade. */
+.landing-install-cta {
+  animation: motion-fade-in var(--motion-slow) var(--ease-out) both;
+}
+
+.landing-install-hint {
+  animation: motion-rise-in var(--motion-base) var(--ease-out) both;
+}
+
+/* Heltinnholdet er det første brukeren ser. En kort felles fade tar bort det
+   harde omslaget når heltbildet og fonten lander, men uten forskyvning — teksten
+   skal ikke flytte seg mens man begynner å lese. Ingen forsinkelse per element:
+   trappet inngang på en landingsside er akkurat den typen effekt som gjør at et
+   verktøy føles som en reklame. */
+.landing-hero-content {
+  animation: motion-fade-in var(--motion-slow) var(--ease-out) both;
+}
+
+/* === Overlay-bevegelse ===
+   Ligger etter alle responsive blokker fordi flere av dem setter `transform` på
+   de samme elementene (sentrering). En animasjon som skriver `transform` må
+   derfor deklareres her for å vinne, og keyframene under må selv bære med seg
+   den sentreringen de overskriver.
+
+   Retningen følger alltid ankerkanten: noe som henger fra toppen faller ned inn
+   og trekker seg opp ut, noe som er dokket i bunnen stiger opp inn. Motsatt
+   retning leses som at boksen forsvinner *inn i* kanten den sitter fast i. */
+
+/* --- Modaler (fullskjerm, inset: 0 — ingen egen scrim å fade separat) --- */
+.harbor-map-modal,
+.sea-marks-modal,
+.gps-help-modal {
+  animation: motion-pop-in var(--motion-base) var(--ease-out) both;
+}
+
+.harbor-map-modal.is-exiting,
+.sea-marks-modal.is-exiting,
+.gps-help-modal.is-exiting {
+  animation: motion-pop-out var(--motion-fast) var(--ease-in) both;
+}
+
+/* Innholdet skal ligge ferdig på plass før bakgrunnen er helt tett, ellers ser
+   det ut som kortet drar kartet med seg. Litt kortere enn kortet selv. */
+.harbor-map-modal > *,
+.sea-marks-modal > *,
+.gps-help-modal > * {
+  animation: motion-fade-in var(--motion-fast) var(--ease-out) both;
+}
+
+/* --- Skuffer: innstillinger og kartlag --- */
+.panel-drawer {
+  animation: motion-rise-in var(--motion-base) var(--ease-out) both;
+}
+
+.panel-drawer.is-exiting {
+  animation: motion-rise-out var(--motion-fast) var(--ease-in) both;
+}
+
+/* I lav landskapsmodus er skuffen absolutt plassert med `top` ved siden av
+   instrumentkolonnen, ikke dokket i bunnen — da må den falle ned, ikke stige. */
+@media (max-height: 540px) and (orientation: landscape) {
+  .panel-drawer {
+    animation: motion-drop-in var(--motion-base) var(--ease-out) both;
+  }
+
+  .panel-drawer.is-exiting {
+    animation: motion-drop-out var(--motion-fast) var(--ease-in) both;
+  }
+}
+
+/* --- Varsler ---
+   Henger under toppkanten i .map-center-overlays. `--ease-emphasis` bremser
+   hardere mot slutten enn `--ease-out`, så et grunnvannsvarsel setter seg med
+   litt mer tyngde og fanger blikket uten å blinke. Bevisst ingen løkke —
+   varselet står helt stille når det først er på plass. */
+.gps-alert,
+.marine-alert {
+  animation: motion-drop-in var(--motion-base) var(--ease-emphasis) both;
+}
+
+.gps-alert.is-exiting,
+.marine-alert.is-exiting {
+  animation: motion-drop-out var(--motion-fast) var(--ease-in) both;
+}
+
+/* --- Værkortet --- */
+.map-weather-card {
+  animation: motion-drop-in var(--motion-base) var(--ease-out) both;
+}
+
+.map-weather-card.is-exiting {
+  animation: motion-drop-out var(--motion-fast) var(--ease-in) both;
+}
+
+/* --- Presis posisjon ---
+   Flytende boks øverst til høyre, eller i flyt inne i .map-top-cluster når
+   værkortet er åpent. Begge er toppankret. */
+.coordinate-panel {
+  animation: motion-drop-in var(--motion-base) var(--ease-out) both;
+}
+
+.coordinate-panel.is-exiting {
+  animation: motion-drop-out var(--motion-fast) var(--ease-in) both;
+}
+
+/* I portrett er den samme boksen en arkfane som stikker opp over
+   instrumentpanelet, sentrert med `transform: translateX(-50%)`. Keyframene
+   over ville nullet ut den sentreringen og dyttet fanen 50 % til høyre, så her
+   brukes varianter som bærer sentreringen videre. */
+@keyframes motion-rise-in-centered {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes motion-rise-out-centered {
+  from {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-50%, 10px, 0);
+  }
+}
+
+@media (max-width: 820px) and (orientation: portrait) {
+  .bottom-dock > .coordinate-panel {
+    animation: motion-rise-in-centered var(--motion-base) var(--ease-out) both;
+  }
+
+  .bottom-dock > .coordinate-panel.is-exiting {
+    animation: motion-rise-out-centered var(--motion-fast) var(--ease-in) both;
+  }
+}
+
+/* === Redusert bevegelse ===
+   Må ligge sist i fila for å vinne over reglene over. Vi fjerner bevegelsen, ikke
+   funksjonen: alt ender i samme sluttilstand, bare uten overgang. `usePresence`
+   leser samme mediaspørring og hopper over lukkeforsinkelsen, så ingenting blir
+   hengende igjen i DOM-en. Egen-skipsmarkørens puls slås av her fordi den er
+   uendelig — den typen løkke er nettopp det brukere med vestibulære plager slår
+   av innstillingen for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ownship-pulse {
+    animation: none !important;
+    opacity: 0.5;
   }
 }

@@ -7,6 +7,7 @@ import {
   enumSetting,
   usePersistedState,
 } from "./usePersistedState";
+import { usePresence } from "./usePresence";
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -2020,6 +2021,21 @@ type BeforeInstallPromptEvent = Event & {
 // Kan ikke tvinge installasjon — nettleseren eier gesten. Vi fanger
 // beforeinstallprompt (Android/Chromium) og viser egen knapp; iOS Safari
 // sender ikke eventet, så der viser vi manuell instruksjon i stedet.
+/**
+ * Husker siste ikke-tomme verdi så lenge `keepAlive` er sant.
+ *
+ * Overlays som får innholdet sitt fra en avledet verdi (`visibleMarineAlert`,
+ * `harborMapOpen`) mister det i samme render som verdien blir null. Uten dette
+ * ville boksen bli tom idet exit-animasjonen starter, og brukeren ser et blankt
+ * skall tone ut.
+ */
+function useLastPresent<T>(value: T | null, keepAlive: boolean): T | null {
+  const lastRef = useRef<T | null>(value);
+  if (value !== null) lastRef.current = value;
+  else if (!keepAlive) lastRef.current = null;
+  return value !== null ? value : keepAlive ? lastRef.current : null;
+}
+
 function useInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
@@ -2992,7 +3008,7 @@ function NavigationApp() {
         })
           .setLngLat(lngLat)
           .setHTML(
-            `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span>${qualityRow}<div class="popup-water-temp">${WATER_TEMP_ICON_SVG}<span>${escapePopupText(text.waterTemperature)}</span><strong data-water-temp aria-live="polite">${escapePopupText(text.waterTemperatureLoading)}</strong></div></div>`,
+            `<div class="popup-card"><div class="popup-title">${BEACH_ICON_SVG}<strong>${escapePopupText(name)}</strong></div><span class="popup-type-badge">${escapePopupText(text.beachBadge)}</span>${qualityRow}<div class="popup-water-temp">${WATER_TEMP_ICON_SVG}<span>${escapePopupText(text.waterTemperature)}</span><strong data-water-temp aria-live="polite" aria-busy="true">${escapePopupText(text.waterTemperatureLoading)}</strong></div></div>`,
           )
           .addTo(map);
 
@@ -3021,7 +3037,12 @@ function NavigationApp() {
           const target = popup
             .getElement()
             ?.querySelector("[data-water-temp]");
-          if (target) target.textContent = label;
+          if (target) {
+            target.textContent = label;
+            // Stopper ventepulsen i CSS. Teksten byttes på samme plass, så
+            // layouten står stille mens verdien kommer.
+            target.removeAttribute("aria-busy");
+          }
         })();
 
         popup.on("close", () => {
@@ -3954,6 +3975,17 @@ function NavigationApp() {
     });
   };
 
+  // Dybde og avstand til land hentes over nett og er strupet på tid og avstand, så
+  // de endrer seg sjelden nok til at en «settle»-animasjon leses som at et nytt
+  // estimat har kommet inn. Fart og kurs står bevisst uten: de oppdateres på hver
+  // GPS-fiks, og et tall som blinker flere ganger i sekundet er ikke lesbart.
+  const depthValueText = onLand
+    ? text.onLand
+    : formatDepth(depth.value, depthUnit);
+  const shorelineValueText = onLand
+    ? text.onLand
+    : formatDistance(shoreline.distanceMeters, distanceUnit);
+
   const readouts = useMemo(
     () => [
       {
@@ -4050,6 +4082,26 @@ function NavigationApp() {
     }
   }, [alertSoundEnabled, marineAlertKey, visibleMarineAlert]);
 
+  // Alt som vises betinget må holdes montert gjennom exit-animasjonen. Hookene
+  // ligger samlet her fordi rekkefølgen på hook-kall må være stabil, og fordi
+  // det er lettere å se hvilke overlays som har bevegelse når de står sammen.
+  const harborMapPresence = usePresence(harborMapOpen !== null);
+  const seaMarksPresence = usePresence(seaMarksOpen);
+  const gpsHelpPresence = usePresence(gpsHelpOpen);
+  const displayDrawerPresence = usePresence(displayOpen);
+  const controlsDrawerPresence = usePresence(controlsOpen);
+  const gpsAlertPresence = usePresence(visibleGpsIssue !== null);
+  const marineAlertPresence = usePresence(visibleMarineAlert !== null);
+  const weatherCardPresence = usePresence(weatherOpen);
+  const coordinatePanelPresence = usePresence(showPrecisePosition);
+
+  // Innholdet i disse forsvinner samtidig som `visible*`-verdien blir null, men
+  // noden skal stå ut animasjonen — derfor holder vi siste viste verdi.
+  const harborMapShown = useLastPresent(harborMapOpen, harborMapPresence.mounted);
+  const gpsIssueShown = useLastPresent(visibleGpsIssue, gpsAlertPresence.mounted);
+  const marineAlertShown = useLastPresent(visibleMarineAlert, marineAlertPresence.mounted);
+  const marineAlertKeyShown = useLastPresent(marineAlertKey, marineAlertPresence.mounted);
+
   const toggles = [
     {
       label: text.accuracyRing,
@@ -4103,10 +4155,13 @@ function NavigationApp() {
     window.location.href = vippsPaymentUrl;
   };
 
-  const coordinatePanelInline = weatherOpen && !isPortrait;
-  const coordinatePanel = showPrecisePosition && (
+  // Følger værkortets *monterte* tilstand, ikke `weatherOpen`: ellers ville
+  // presis posisjon hoppe ut av .map-top-cluster i samme øyeblikk værkortet
+  // begynner å tone ut, og vi ville sett den flytte seg under animasjonen.
+  const coordinatePanelInline = weatherCardPresence.mounted && !isPortrait;
+  const coordinatePanel = coordinatePanelPresence.mounted && (
     <section
-      className={coordinatePanelInline ? "coordinate-panel coordinate-panel-inline" : "coordinate-panel"}
+      className={`${coordinatePanelInline ? "coordinate-panel coordinate-panel-inline" : "coordinate-panel"} ${coordinatePanelPresence.className}`}
       aria-label={text.precisePosition}
     >
       <span>{text.precisePosition}</span>
@@ -4120,7 +4175,13 @@ function NavigationApp() {
   );
 
   return (
-    <main className={displayOpen || controlsOpen ? "app-shell panel-drawer-open" : "app-shell"}>
+    <main
+      className={
+        displayDrawerPresence.mounted || controlsDrawerPresence.mounted
+          ? "app-shell panel-drawer-open"
+          : "app-shell"
+      }
+    >
       <div ref={mapContainer} className="map" aria-label={text.navigationMap} />
 
       <section className="topbar" aria-label={text.navigationStatus}>
@@ -4134,7 +4195,7 @@ function NavigationApp() {
       </section>
 
       <div className="map-center-overlays">
-      {weatherOpen && (() => {
+      {weatherCardPresence.mounted && (() => {
         const SymbolIcon = weatherSymbolIcon(weather.symbolCode);
         const windArrow = weatherFlowArrowDegrees(weather.windDirection, "from");
         const waveArrow = weatherFlowArrowDegrees(weather.waveDirection, "from");
@@ -4145,7 +4206,7 @@ function NavigationApp() {
           <div className="map-top-cluster">
             <button
               type="button"
-              className="weather-card map-weather-card"
+              className={`weather-card map-weather-card ${weatherCardPresence.className}`}
               aria-label={fix ? `${text.weatherHere} — ${text.weatherOpenForecast}` : text.weatherHere}
               disabled={!forecastUrl}
               onClick={() => {
@@ -4208,12 +4269,12 @@ function NavigationApp() {
         );
       })()}
 
-      {visibleGpsIssue && (
-        <div className="gps-alert" role="alert">
+      {gpsAlertPresence.mounted && gpsIssueShown && (
+        <div className={`gps-alert ${gpsAlertPresence.className}`} role="alert">
           <ShieldAlert size={17} />
           <div>
             <strong>{text.gpsIssueTitle}</strong>
-            <span>{visibleGpsIssue.message}</span>
+            <span>{gpsIssueShown.message}</span>
           </div>
           <button
             type="button"
@@ -4232,7 +4293,7 @@ function NavigationApp() {
           <button
             type="button"
             className="marine-alert-close"
-            onClick={() => setDismissedGpsIssueCode(visibleGpsIssue.code)}
+            onClick={() => setDismissedGpsIssueCode(gpsIssueShown.code)}
             title={text.dismissGpsIssue}
             aria-label={text.dismissGpsIssue}
           >
@@ -4241,14 +4302,14 @@ function NavigationApp() {
         </div>
       )}
 
-      {visibleMarineAlert && marineAlertKey && (
-        <div className={`marine-alert ${visibleMarineAlert.kind}`} role="alert">
+      {marineAlertPresence.mounted && marineAlertShown && marineAlertKeyShown && (
+        <div className={`marine-alert ${marineAlertShown.kind} ${marineAlertPresence.className}`} role="alert">
           <ShieldAlert size={16} />
-          <span>{visibleMarineAlert.message}</span>
+          <span>{marineAlertShown.message}</span>
           <button
             type="button"
             className="marine-alert-close"
-            onClick={() => setDismissedAlertKey(marineAlertKey)}
+            onClick={() => setDismissedAlertKey(marineAlertKeyShown)}
             title={text.dismissAlert}
             aria-label={text.dismissAlert}
           >
@@ -4272,8 +4333,14 @@ function NavigationApp() {
               aria-label={text.toggleDepthUnit}
             >
               <span>{text.mapDepth}</span>
-              <strong>
-                {onLand ? text.onLand : formatDepth(depth.value, depthUnit)}
+              {/* `key` på verdien tvinger React til å sette inn et nytt element når
+                  tallet faktisk endrer seg, og først da spiller CSS-animasjonen av
+                  seg. Uten den ville den aldri kjørt igjen etter første render. */}
+              <strong
+                key={depthValueText}
+                className="instrument-value-settle"
+              >
+                {depthValueText}
               </strong>
             </button>
             <button
@@ -4288,10 +4355,11 @@ function NavigationApp() {
               aria-label={text.toggleDistanceUnit}
             >
               <span>{text.distanceToLand}</span>
-              <strong>
-                {onLand
-                  ? text.onLand
-                  : formatDistance(shoreline.distanceMeters, distanceUnit)}
+              <strong
+                key={shorelineValueText}
+                className="instrument-value-settle"
+              >
+                {shorelineValueText}
               </strong>
             </button>
             <Waves size={28} />
@@ -4415,8 +4483,8 @@ function NavigationApp() {
             </button>
           </div>
 
-          {displayOpen && (
-            <div className="panel-drawer display-drawer">
+          {displayDrawerPresence.mounted && (
+            <div className={`panel-drawer display-drawer ${displayDrawerPresence.className}`}>
               <label className="language-row">
                 <span>{text.language}</span>
                 <select
@@ -4469,8 +4537,8 @@ function NavigationApp() {
             </div>
           )}
 
-          {controlsOpen && (
-            <div className="panel-drawer embedded-controls">
+          {controlsDrawerPresence.mounted && (
+            <div className={`panel-drawer embedded-controls ${controlsDrawerPresence.className}`}>
               <button
                 type="button"
                 className={baseMap === "off" ? "" : "active"}
@@ -4542,12 +4610,17 @@ function NavigationApp() {
         </section>
       </div>
 
-      {harborMapOpen && (
-        <section className="harbor-map-modal" role="dialog" aria-modal="true" aria-label={harborMapOpen.name}>
+      {harborMapPresence.mounted && harborMapShown && (
+        <section
+          className={`harbor-map-modal ${harborMapPresence.className}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={harborMapShown.name}
+        >
           <header>
             <div>
               <Anchor size={20} />
-              <strong>{harborMapOpen.name}</strong>
+              <strong>{harborMapShown.name}</strong>
             </div>
             <button
               type="button"
@@ -4559,11 +4632,11 @@ function NavigationApp() {
             </button>
           </header>
           <iframe
-            title={`${harborMapOpen.name} i Google Maps`}
-            src={`https://www.google.com/maps?q=${encodeURIComponent(`${harborMapOpen.latitude},${harborMapOpen.longitude}`)}&z=15&output=embed`}
+            title={`${harborMapShown.name} i Google Maps`}
+            src={`https://www.google.com/maps?q=${encodeURIComponent(`${harborMapShown.latitude},${harborMapShown.longitude}`)}&z=15&output=embed`}
           />
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${harborMapOpen.latitude},${harborMapOpen.longitude}`)}`}
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${harborMapShown.latitude},${harborMapShown.longitude}`)}`}
             target="_blank"
             rel="noreferrer"
           >
@@ -4573,8 +4646,13 @@ function NavigationApp() {
         </section>
       )}
 
-      {seaMarksOpen && (
-        <section className="sea-marks-modal" role="dialog" aria-modal="true" aria-labelledby="sea-marks-title">
+      {seaMarksPresence.mounted && (
+        <section
+          className={`sea-marks-modal ${seaMarksPresence.className}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sea-marks-title"
+        >
           <div className="sea-marks-header">
             <div>
               <strong id="sea-marks-title">{text.seaMarksTitle}</strong>
@@ -4759,9 +4837,9 @@ function NavigationApp() {
         </section>
       )}
 
-      {gpsHelpOpen && (
+      {gpsHelpPresence.mounted && (
         <section
-          className="gps-help-modal"
+          className={`gps-help-modal ${gpsHelpPresence.className}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="gps-help-title"

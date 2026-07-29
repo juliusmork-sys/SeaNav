@@ -114,6 +114,23 @@ type WeatherState = {
   symbolCode: string | null;
 };
 
+type TideExtreme = {
+  type: "high" | "low";
+  /** Millisekunder siden epoke. Kartverket leverer ISO med UTC-sone. */
+  time: number;
+  /** Centimeter over sjøkartnull. */
+  value: number;
+};
+
+type TideState = {
+  // «unavailable» er ikke en feil: Kartverket har ikke vannstand for posisjoner
+  // langt fra kysten, og det gjelder også reelle sjøposisjoner. Det skal ikke se
+  // ut som at noe er galt.
+  status: "idle" | "loading" | "ready" | "error" | "unavailable";
+  station: string | null;
+  extremes: TideExtreme[];
+};
+
 type Harbor = {
   id: string;
   name: string;
@@ -605,6 +622,10 @@ const UI_TEXT = {
     wind: "Vind",
     waves: "Bølger",
     current: "Strøm",
+    tideHigh: "Flo",
+    tideLow: "Fjære",
+    tideNow: "Nå",
+    tideExpanded: "Utvidet tidevannsvisning",
     harborCapacity: "Kapasitet",
     harborHours: "Åpningstider",
     harborPhone: "Telefon",
@@ -893,6 +914,10 @@ const UI_TEXT = {
     wind: "Wind",
     waves: "Waves",
     current: "Current",
+    tideHigh: "High tide",
+    tideLow: "Low tide",
+    tideNow: "Now",
+    tideExpanded: "Extended tide display",
     harborCapacity: "Capacity",
     harborHours: "Opening hours",
     harborPhone: "Phone",
@@ -971,6 +996,11 @@ const DEFAULT_WEATHER_STATE: WeatherState = {
   currentDirection: null,
   waterTemperature: null,
   symbolCode: null,
+};
+const DEFAULT_TIDE_STATE: TideState = {
+  status: "idle",
+  station: null,
+  extremes: [],
 };
 const EMPTY_HARBOR_FEATURE_COLLECTION: HarborState["featureCollection"] = {
   type: "FeatureCollection",
@@ -1138,6 +1168,26 @@ function formatDepth(value: number | null, unit: DepthUnit) {
   return `${absoluteValue.toFixed(1)} m`;
 }
 
+/**
+ * Vannstand over sjøkartnull. Kartverket leverer centimeter.
+ *
+ * Fortegnet beholdes med vilje — `formatDepth` tar absoluttverdien, men for
+ * tidevann betyr minus at vannet står *under* sjøkartnull, og det er nettopp da
+ * en dybde i kartet blir grunnere enn den ser ut.
+ */
+function formatTideLevel(valueCm: number | null, unit: DepthUnit) {
+  if (valueCm === null || Number.isNaN(valueCm)) return "--";
+  if (unit === "ft") return `${(valueCm / 30.48).toFixed(1)} ft`;
+  return `${Math.round(valueCm)} cm`;
+}
+
+function formatClockTime(time: number, language: Language) {
+  return new Date(time).toLocaleTimeString(language === "no" ? "nb-NO" : "en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatDistance(value: number | null, unit: DistanceUnit) {
   if (value === null || Number.isNaN(value)) return "--";
   if (unit === "nm") return `${(value / 1852).toFixed(value >= 1852 ? 1 : 2)} nm`;
@@ -1242,6 +1292,33 @@ function CurrentArrowsIcon({ size = 24 }: { size?: number }) {
       <path d="M16.5 7L19 9L16.5 11" transform="rotate(-22.58 19 9)" />
       <path d="M5 15a6.5 6.5 0 0 1 7 0 6.5 6.5 0 0 0 7 0" />
       <path d="M16.5 13L19 15L16.5 17" transform="rotate(-22.58 19 15)" />
+    </svg>
+  );
+}
+
+/**
+ * Bølgelinje med pil over. Pilen peker den veien vannet er på vei.
+ *
+ * Pilhodet er med vilje like bredt som det er: ikonet vises på 14 px i
+ * værkortet, der 2 px strek blir omtrent 1,2 px, og et smalere hode kollapser
+ * visuelt til en strek — da forsvinner hele retningen ikonet skal formidle.
+ */
+function TideIcon({ rising, size = 24 }: { rising: boolean; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={rising ? "M12 12V4" : "M12 4v8"} />
+      <path d={rising ? "M8.5 7.5 12 4l3.5 3.5" : "M8.5 8.5 12 12l3.5-3.5"} />
+      <path d="M3 18q3-3 6 0t6 0t6 0" />
     </svg>
   );
 }
@@ -1995,6 +2072,71 @@ async function fetchWeather(
   } satisfies WeatherState;
 }
 
+async function fetchTide(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(
+    `/api/tide?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`,
+    { signal },
+  );
+
+  if (!response.ok) {
+    throw new Error("Tide service unavailable");
+  }
+
+  const payload = (await response.json()) as {
+    available?: boolean;
+    station?: string | null;
+    extremes?: Array<{ type?: string; time?: string; value?: number }>;
+  };
+
+  if (!payload.available) {
+    return { ...DEFAULT_TIDE_STATE, status: "unavailable" } satisfies TideState;
+  }
+
+  const extremes: TideExtreme[] = [];
+  for (const entry of payload.extremes ?? []) {
+    if (entry.type !== "high" && entry.type !== "low") continue;
+    const time = Date.parse(entry.time ?? "");
+    if (!Number.isFinite(time)) continue;
+    if (typeof entry.value !== "number" || !Number.isFinite(entry.value)) continue;
+    extremes.push({ type: entry.type, time, value: entry.value });
+  }
+  extremes.sort((a, b) => a.time - b.time);
+
+  if (extremes.length < 2) {
+    return { ...DEFAULT_TIDE_STATE, status: "unavailable" } satisfies TideState;
+  }
+
+  return {
+    status: "ready",
+    station: typeof payload.station === "string" ? payload.station : null,
+    extremes,
+  } satisfies TideState;
+}
+
+/**
+ * Vannstand mellom to ekstremverdier, tilnærmet med en halv cosinusbue.
+ *
+ * Dette er standardmetoden når man bare har høy- og lavvann, og treffer innen
+ * noen få centimeter. Merk hva tallet da er: en interpolasjon mellom to
+ * prediksjoner, ikke en måling. Skal det en dag legges til en kartlagt dybde,
+ * bør vi hente den faktiske kurven fra Kartverket (`datatype=all`) i stedet.
+ */
+function interpolateTideLevel(
+  previous: TideExtreme,
+  next: TideExtreme,
+  atTime: number,
+) {
+  const span = next.time - previous.time;
+  if (span <= 0) return next.value;
+  const progress = Math.min(1, Math.max(0, (atTime - previous.time) / span));
+  const eased = (1 - Math.cos(progress * Math.PI)) / 2;
+  return previous.value + (next.value - previous.value) * eased;
+}
+
 async function fetchNearbyHarbors(
   latitude: number,
   longitude: number,
@@ -2298,6 +2440,12 @@ function NavigationApp() {
     longitude: number;
     timestamp: number;
   } | null>(null);
+  const tideQueryRef = useRef<{
+    latitude: number;
+    longitude: number;
+    timestamp: number;
+  } | null>(null);
+  const tideAbortRef = useRef<number | null>(null);
   const lastPlayedAlertKeyRef = useRef<string | null>(null);
   const orientationHeadingRef = useRef<number | null>(null);
   const [fix, setFix] = useState<PositionFix | null>(null);
@@ -2312,6 +2460,11 @@ function NavigationApp() {
   const [beaches, setBeaches] = useState<BeachState>(DEFAULT_BEACH_STATE);
   const [harbors, setHarbors] = useState<HarborState>(DEFAULT_HARBOR_STATE);
   const [weather, setWeather] = useState<WeatherState>(DEFAULT_WEATHER_STATE);
+  const [tide, setTide] = useState<TideState>(DEFAULT_TIDE_STATE);
+  // Tikker hvert minutt. Tidevannsdataene ligger fast i over et døgn, men hvilken
+  // ekstremverdi som er «neste» og hvor prikken står i kurven endrer seg med
+  // klokka — det er derfor dette er en egen tilstand og ikke utledet av `fix`.
+  const [tideClock, setTideClock] = useState(() => Date.now());
   const [language, setLanguage] = usePersistedState(
     "seanav-language",
     enumSetting<Language>("no", ["no", "en"]),
@@ -2345,6 +2498,10 @@ function NavigationApp() {
   const [controlsOpen, setControlsOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = usePersistedState(
     "seanav-weather-open",
+    booleanSetting(false),
+  );
+  const [tideExpanded, setTideExpanded] = usePersistedState(
+    "seanav-tide-expanded",
     booleanSetting(false),
   );
   const [isPortrait, setIsPortrait] = useState(() => {
@@ -2862,7 +3019,10 @@ function NavigationApp() {
         type: "raster",
         tiles: [SJOKART_WMTS],
         tileSize: 256,
-        attribution: "Nautical chart: Kartverket",
+        // Dekker også vannstandsdataene i værkortet. De er CC BY 4.0 og krever
+        // kreditering, og kartattribusjonen er stedet appen allerede har for
+        // det — et eget felt i et tett kort ville kostet plass uten å gi mer.
+        attribution: "Nautical chart and tide data: Kartverket",
       });
       map.addLayer({
         id: "sjokart",
@@ -3894,6 +4054,70 @@ function NavigationApp() {
     }, 850);
   }, [fix]);
 
+  // Ett minutts oppløsning holder for et klokkeslett og en prikk i en kurve.
+  useEffect(() => {
+    const timer = window.setInterval(() => setTideClock(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!fix) return;
+
+    // Ett svar dekker over et døgn, og Kartverket velger uansett nærmeste
+    // målestasjon. Derfor er tersklene helt andre enn for værmeldingen over:
+    // vi henter på nytt først når båten har flyttet seg langt nok til at
+    // stasjonsvalget kan ha endret seg, eller når vinduet er i ferd med å gå
+    // tomt bakfra.
+    const lastExtreme = tide.extremes[tide.extremes.length - 1];
+    const windowRunningOut =
+      lastExtreme === undefined || lastExtreme.time - tideClock < 2 * 3600000;
+    const lastQuery = tideQueryRef.current;
+    const movedFar =
+      lastQuery === null ||
+      distanceBetweenCoordinates(
+        fix.latitude,
+        fix.longitude,
+        lastQuery.latitude,
+        lastQuery.longitude,
+      ) > 10000;
+
+    const sinceLastQuery = lastQuery ? Date.now() - lastQuery.timestamp : Infinity;
+
+    // Gulv mot at flere GPS-fikser rett etter hverandre gir hvert sitt kall.
+    if (sinceLastQuery < 30000) return;
+    if (!movedFar && !windowRunningOut) return;
+    // `windowRunningOut` er permanent sann for en posisjon uten vannstandsdata —
+    // `extremes` blir jo aldri fylt. Derfor prøver vi sjeldnere i det tilfellet.
+    // Har båten derimot flyttet seg langt, kan stasjonen ha blitt en annen, og da
+    // skal vi hente med én gang: en fastlåst brems her lot stasjonsnavnet og
+    // tidevannet bli stående på forrige landsdel i flere minutter.
+    if (!movedFar && sinceLastQuery < 300000) return;
+
+    if (tideAbortRef.current !== null) {
+      window.clearTimeout(tideAbortRef.current);
+    }
+
+    const requestedAt = Date.now();
+    tideQueryRef.current = {
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      timestamp: requestedAt,
+    };
+    setTide((current) => ({ ...current, status: "loading" }));
+
+    tideAbortRef.current = window.setTimeout(() => {
+      fetchTide(fix.latitude, fix.longitude)
+        .then((result) => {
+          if (tideQueryRef.current?.timestamp !== requestedAt) return;
+          setTide(result);
+        })
+        .catch(() => {
+          if (tideQueryRef.current?.timestamp !== requestedAt) return;
+          setTide((current) => ({ ...current, status: "error" }));
+        });
+    }, 850);
+  }, [fix, tide.extremes, tideClock]);
+
   useEffect(() => {
     if (!beachesVisible) return;
     const map = mapRef.current;
@@ -4135,6 +4359,98 @@ function NavigationApp() {
     ? text.onLand
     : formatDistance(shoreline.distanceMeters, distanceUnit);
 
+  // Alt tidevannet trenger, utledet på ett sted: hvilke to ekstremverdier vi står
+  // mellom, hvilken vei det går, nivået nå, og punktene til minikurven.
+  const tideNow = useMemo(() => {
+    // Bevisst ingen sjekk på `status`: under en ny henting står statusen på
+    // «loading» mens `extremes` fortsatt holder forrige svar. Skjulte vi raden da,
+    // ville hele kolonnen blinke bort hver gang båten flytter seg langt nok.
+    // Prediksjonene gjelder uansett i over et døgn. Ved «unavailable» og «error»
+    // er `extremes` tom, og da faller vi ut her.
+    if (tide.extremes.length < 2) return null;
+
+    const nextIndex = tide.extremes.findIndex(
+      (extreme) => extreme.time > tideClock,
+    );
+    // Ingen ekstremverdi igjen i vinduet — henteeffekten er allerede på vei med
+    // nye data, og inntil de kommer har vi ingenting troverdig å vise.
+    if (nextIndex < 1) return null;
+
+    const previous = tide.extremes[nextIndex - 1];
+    const next = tide.extremes[nextIndex];
+    const following = tide.extremes[nextIndex + 1] ?? null;
+
+    return {
+      previous,
+      next,
+      following,
+      rising: next.type === "high",
+      level: interpolateTideLevel(previous, next, tideClock),
+    };
+  }, [tide, tideClock]);
+
+  // Kurven tegnes av samme cosinustilnærming som nivået, så prikken ligger
+  // alltid nøyaktig på linja. Passert del og resten er to separate baner, slik
+  // at de kan ha ulik farge uten å regne strekklengder.
+  const tideCurve = useMemo(() => {
+    if (!tideNow || tide.extremes.length < 2) return null;
+
+    // Koordinatsystemet har samme forhold som elementet tegnes i, slik at
+    // skalering blir uniform. Med `preserveAspectRatio="none"` ville prikken
+    // blitt oval og strekene ulikt tykke i hver retning.
+    const width = 100;
+    const height = 26;
+    const top = 3.5;
+    const bottom = 22.5;
+    const from = tideNow.previous.time;
+    const to = (tideNow.following ?? tideNow.next).time;
+    const span = to - from;
+    if (span <= 0) return null;
+
+    const values = [tideNow.previous, tideNow.next, tideNow.following]
+      .filter((extreme): extreme is TideExtreme => extreme !== null)
+      .map((extreme) => extreme.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+
+    const pointAt = (time: number) => {
+      const segmentEnd =
+        tideNow.following !== null && time > tideNow.next.time
+          ? tideNow.following
+          : tideNow.next;
+      const segmentStart =
+        segmentEnd === tideNow.next ? tideNow.previous : tideNow.next;
+      const value = interpolateTideLevel(segmentStart, segmentEnd, time);
+      return {
+        x: ((time - from) / span) * width,
+        y: bottom - ((value - min) / range) * (bottom - top),
+      };
+    };
+
+    const steps = 40;
+    const points = Array.from({ length: steps + 1 }, (_, index) =>
+      pointAt(from + (span * index) / steps),
+    );
+    const nowPoint = pointAt(tideClock);
+    const nowIndex = Math.round(((tideClock - from) / span) * steps);
+
+    const toPath = (subset: typeof points) =>
+      subset
+        .map(
+          (point, index) =>
+            `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
+        )
+        .join(" ");
+
+    return {
+      viewBox: `0 0 ${width} ${height}`,
+      full: toPath(points),
+      passed: toPath(points.slice(0, Math.max(2, nowIndex + 1))),
+      now: nowPoint,
+    };
+  }, [tide.extremes.length, tideClock, tideNow]);
+
   const readouts = useMemo(
     () => [
       {
@@ -4242,6 +4558,11 @@ function NavigationApp() {
   const gpsAlertPresence = usePresence(visibleGpsIssue !== null);
   const marineAlertPresence = usePresence(visibleMarineAlert !== null);
   const weatherCardPresence = usePresence(weatherOpen);
+  // Stripa slås av og på fra innstillingene, altså midt i blikket til brukeren.
+  // Presence-en gjelder bare bryteren: forsvinner tidevannsdataene i stedet
+  // (posisjon uten vannstand), er det ingen handling å bekrefte, og da er det
+  // riktigere at raden bare er borte.
+  const tideStripPresence = usePresence(tideExpanded);
   const coordinatePanelPresence = usePresence(showPrecisePosition);
 
   // Innholdet i disse forsvinner samtidig som `visible*`-verdien blir null, men
@@ -4286,6 +4607,11 @@ function NavigationApp() {
       label: text.weatherToggle,
       checked: weatherOpen,
       onChange: setWeatherOpen,
+    },
+    {
+      label: text.tideExpanded,
+      checked: tideExpanded,
+      onChange: setTideExpanded,
     },
   ];
   const configuredVippsPaymentUrl =
@@ -4409,6 +4735,62 @@ function NavigationApp() {
                         <ArrowUp size={13} style={{ transform: `rotate(${currentArrow}deg)` }} />
                       )}
                     </div>
+                  </div>
+                  {tideNow && (
+                    <div className="weather-card-metric">
+                      <div className="weather-card-metric-label">
+                        <TideIcon rising={tideNow.rising} size={14} />
+                        <span>
+                          {tideNow.rising ? text.tideHigh : text.tideLow}
+                        </span>
+                      </div>
+                      <div
+                        className="weather-card-metric-value"
+                        aria-busy={tide.status === "loading"}
+                      >
+                        <strong>
+                          {formatClockTime(tideNow.next.time, language)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {tideStripPresence.mounted && tideNow && tideCurve && (
+                <div className={`weather-card-tide ${tideStripPresence.className}`}>
+                  <svg
+                    className="tide-spark"
+                    viewBox={tideCurve.viewBox}
+                    aria-hidden="true"
+                  >
+                    <path className="tide-spark-full" d={tideCurve.full} />
+                    <path className="tide-spark-passed" d={tideCurve.passed} />
+                    <circle
+                      className="tide-spark-now"
+                      cx={tideCurve.now.x}
+                      cy={tideCurve.now.y}
+                      r={2.8}
+                    />
+                  </svg>
+                  <div className="weather-card-tide-now">
+                    <span className="weather-card-metric-label">
+                      {tide.station
+                        ? `${text.tideNow} · ${tide.station}`
+                        : text.tideNow}
+                    </span>
+                    <strong>{formatTideLevel(tideNow.level, depthUnit)}</strong>
+                  </div>
+                  <div className="weather-card-tide-events">
+                    <span>
+                      <em>{tideNow.rising ? text.tideHigh : text.tideLow}</em>
+                      {` ${formatClockTime(tideNow.next.time, language)} · ${formatTideLevel(tideNow.next.value, depthUnit)}`}
+                    </span>
+                    {tideNow.following && (
+                      <span>
+                        <em>{tideNow.rising ? text.tideLow : text.tideHigh}</em>
+                        {` ${formatClockTime(tideNow.following.time, language)} · ${formatTideLevel(tideNow.following.value, depthUnit)}`}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

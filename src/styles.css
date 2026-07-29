@@ -4969,7 +4969,10 @@ button {
   display: flex;
   grid-column: 1 / -1;
   align-items: center;
-  gap: 12px;
+  /* Luft mellom temperaturen og første metrikk. Temperaturen er det eneste
+     elementet uten skillelinje rundt seg, så uten denne avstanden klistrer den
+     seg til vindkolonnen. */
+  gap: 16px;
   padding: 10px 14px;
   border: 1px solid rgba(70, 98, 110, 0.26);
   border-radius: 10px;
@@ -5018,7 +5021,12 @@ button {
   display: grid;
   flex: 1 1 auto;
   min-width: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Sporene følger antall kolonner i stedet for å være låst til fire.
+     Tidevannskolonnen faller bort der Kartverket ikke har vannstand, og med
+     `repeat(4, …)` ble det stående igjen et tomt spor på en fjerdedel av
+     bredden. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
 }
 
 .weather-card-metric {
@@ -5026,10 +5034,13 @@ button {
   min-width: 0;
   flex-direction: column;
   gap: 1px;
+  /* Innrykket ligger på alle fire, ikke bare på dem som har skillelinje.
+     Kolonnene er like brede uansett, men uten dette startet innholdet i den
+     første kolonnen 10 px lenger til venstre enn i de andre. */
+  padding-left: 10px;
 }
 
 .weather-card-metric + .weather-card-metric {
-  padding-left: 10px;
   border-left: 1px solid rgba(70, 98, 110, 0.16);
 }
 
@@ -5069,6 +5080,91 @@ button {
   color: #007590;
 }
 
+/* === Utvidet tidevannsvisning ===
+   Stripa legger seg på egen linje ved hjelp av `flex-wrap` på kortet i stedet
+   for at kortet gjøres om til en kolonne. Kortet brukes to steder — over kartet
+   og inne i `.embedded-controls` — og en omlegging til `flex-direction: column`
+   ville måttet vedlikeholdes begge steder. */
+.weather-card {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.weather-card-tide {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: 12px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(70, 98, 110, 0.16);
+}
+
+.tide-spark {
+  width: 104px;
+  height: 28px;
+  flex: 0 0 auto;
+  /* Prikken ligger på kurven, som når toppen av koordinatsystemet. Uten dette
+     klippes den halvveis. */
+  overflow: visible;
+}
+
+.tide-spark-full,
+.tide-spark-passed {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Koordinatsystemet skaleres til elementets bredde. Uten dette ville streken
+     blitt tynnere jo smalere stripa er. */
+  vector-effect: non-scaling-stroke;
+}
+
+.tide-spark-full {
+  stroke: rgba(0, 117, 144, 0.32);
+  stroke-width: 1.6;
+}
+
+.tide-spark-passed {
+  stroke: #007590;
+  stroke-width: 2;
+}
+
+.tide-spark-now {
+  fill: #007590;
+}
+
+.weather-card-tide-now {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+}
+
+.weather-card-tide-now strong {
+  color: #0b2733;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.weather-card-tide-events {
+  display: flex;
+  flex-direction: column;
+  margin-left: auto;
+  gap: 1px;
+  text-align: right;
+}
+
+.weather-card-tide-events span {
+  color: #0b2733;
+  font-size: 0.69rem;
+  white-space: nowrap;
+}
+
+.weather-card-tide-events em {
+  color: #5b7480;
+  font-style: normal;
+}
+
 @media (max-width: 820px) and (orientation: portrait) {
   .embedded-controls {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5076,10 +5172,10 @@ button {
 
   .weather-card {
     padding: 8px 10px;
-    gap: 8px;
+    gap: 12px;
   }
 
-  .weather-card-metric + .weather-card-metric {
+  .weather-card-metric {
     padding-left: 6px;
   }
 
@@ -5089,6 +5185,23 @@ button {
 
   .weather-card-metric-value strong {
     font-size: 0.7rem;
+  }
+
+  .weather-card-tide {
+    gap: 10px;
+  }
+
+  .tide-spark {
+    width: 80px;
+    height: 26px;
+  }
+
+  .weather-card-tide-now strong {
+    font-size: 0.7rem;
+  }
+
+  .weather-card-tide-events span {
+    font-size: 0.64rem;
   }
 }
 
@@ -5538,6 +5651,9 @@ button {
    Ingen spinner og ingen tom plass: teksten som allerede står der pulser dempet
    videre. Da endres ikke layouten når verdien kommer, og brukeren mister aldri
    av syne hva feltet gjelder. */
+/* Tidevannet hentes uavhengig av værmeldingen, så det har sin egen
+   `aria-busy` på selve verdien i stedet for på hele metrikk-raden. */
+.weather-card-metric-value[aria-busy="true"],
 .weather-card-metrics[aria-busy="true"] .weather-card-metric-value {
   animation: motion-breathe 1.4s var(--ease-emphasis) infinite;
 }
@@ -5611,6 +5727,16 @@ button {
    Retningen følger alltid ankerkanten: noe som henger fra toppen faller ned inn
    og trekker seg opp ut, noe som er dokket i bunnen stiger opp inn. Motsatt
    retning leses som at boksen forsvinner *inn i* kanten den sitter fast i. */
+
+/* --- Tidevannsstripa i værkortet ---
+   Stiger opp fra underkanten av kortet, som er kanten den er festet til. */
+.weather-card-tide {
+  animation: motion-rise-in var(--motion-base) var(--ease-out) both;
+}
+
+.weather-card-tide.is-exiting {
+  animation: motion-rise-out var(--motion-fast) var(--ease-in) both;
+}
 
 /* --- Modaler (fullskjerm, inset: 0 — ingen egen scrim å fade separat) --- */
 .harbor-map-modal,

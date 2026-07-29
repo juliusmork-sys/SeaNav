@@ -1985,9 +1985,10 @@ button {
   width: 40px;
   height: 58px;
   transform-origin: 50% 50%;
-  /* Kursendringen skal gli, ikke hoppe, men den må ikke ligge så langt bak GPS-en
-     at markøren peker feil vei. `--motion-slow` er øvre grense. */
-  transition: transform var(--motion-slow) var(--ease-out);
+  /* Ingen transition her: rotasjonen ligger nå på selve markør-elementet, som
+     MapLibre skriver om hver frame mens kartet panoreres. En overgang der ville
+     gjort at båten henger etter kartet. Mykheten i kursendringen kommer fra
+     `interpolateHeading` i posisjonsløkken. */
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.48));
 }
 

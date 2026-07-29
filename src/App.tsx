@@ -2224,6 +2224,30 @@ function NavigationApp() {
   const baseStyleLayerIdsRef = useRef<string[]>([]);
   const beachDisplayModeRef = useRef<BeachDisplayMode>("off");
   const harborsVisibleRef = useRef(false);
+  // Følge-tilstanden leses fra kart-lyttere og fra kamera-effekten. Den må være
+  // en ref i tillegg til state: `setFollowingLocation(false)` fra en gest slår
+  // ikke inn før neste render, og rekker en GPS-fiks å komme før det, ville
+  // kameraet flyttet seg midt i gesten likevel.
+  const followingLocationRef = useRef(true);
+  const northUpRef = useRef(true);
+  // Tidligste tidspunkt den løpende følgingen får røre kameraet igjen. En
+  // eksplisitt «sentrer»- eller nord-opp-handling animerer over flere hundre ms,
+  // og uten denne sperren avbryter første GPS-fiks som kommer underveis
+  // animasjonen — i praksis ble minstezoomen fra «sentrer» aldri satt.
+  const cameraLockUntilRef = useRef(0);
+  // Sant mens en finger eller museknapp står på kartet. Da holder følgingen
+  // fingrene fra kameraet helt.
+  const pointerActiveRef = useRef(false);
+  // Kartets padding avhenger av instrumentpanelets størrelse, som bare endrer
+  // seg ved resize/rotasjon. `getVisibleMapPadding()` gjør
+  // `getBoundingClientRect()` og tvinger dermed synkron layout — for dyrt til å
+  // kalles fra kamerakall som skjer på hver GPS-fiks.
+  const mapPaddingRef = useRef<CameraPadding>({
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  });
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const lastFixRef = useRef<PositionFix | null>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -2494,19 +2518,13 @@ function NavigationApp() {
       const point: [number, number] = [nextFix.longitude, nextFix.latitude];
 
       markerRef.current?.setLngLat(point);
-      const boat = markerRef.current
-        ?.getElement()
-        .querySelector<SVGElement>(".ownship-boat");
-      if (boat && nextFix.heading !== null) {
-        boat.style.transform = `rotate(${nextFix.heading}deg)`;
-      }
-      if (followingLocation) {
-        map.jumpTo({
-          center: point,
-          zoom: Math.max(map.getZoom(), 13),
-          bearing: northUp ? 0 : (nextFix.heading ?? map.getBearing()),
-          padding: getVisibleMapPadding(),
-        });
+      // Markøren er opprettet med `rotationAlignment: "map"`, så rotasjonen her
+      // er kurs i *geografiske* grader. MapLibre trekker fra kartets bearing
+      // selv, hver frame. Roterte vi i stedet SVG-en inne i markøren ville den
+      // stå i skjermkoordinater, og i kurs-opp — der kartet allerede er rotert
+      // til kursen — ville båten blitt rotert dobbelt.
+      if (nextFix.heading !== null) {
+        markerRef.current?.setRotation(nextFix.heading);
       }
 
       const now = performance.now();
@@ -2554,7 +2572,11 @@ function NavigationApp() {
         }
       }
     },
-    [followingLocation, northUp],
+    // Bevisst tom: denne funksjonen rører bare markør og kartkilder, aldri
+    // kameraet. Da holder identiteten seg stabil, og interpolasjonsløkka som
+    // har den i avhengighetslista starter ikke på nytt hver gang brukeren
+    // bytter følge- eller nord-opp-modus.
+    [],
   );
 
   const refreshBeaches = useCallback(
@@ -2697,6 +2719,14 @@ function NavigationApp() {
     harborsVisibleRef.current = harborsVisible;
   }, [harborsVisible]);
 
+  useEffect(() => {
+    followingLocationRef.current = followingLocation;
+  }, [followingLocation]);
+
+  useEffect(() => {
+    northUpRef.current = northUp;
+  }, [northUp]);
+
   const toggleHarbors = useCallback(() => {
     setHarborsVisible((current) => {
       const next = !current;
@@ -2724,7 +2754,59 @@ function NavigationApp() {
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
-    map.on("dragstart", () => setFollowingLocation(false));
+    // Brukeren tar over kartet.
+    //
+    // `dragstart` alene holdt ikke: knip-zoom og to-finger-rotasjon går gjennom
+    // `touchZoomRotate` og fyrer aldri `dragstart`. Følgingen ble dermed stående
+    // på, og kameraet trakk seg tilbake til båten for hver GPS-fiks — kartet lot
+    // seg rett og slett ikke zoome.
+    //
+    // `zoomstart`/`rotatestart` med `originalEvent`-sjekk ble prøvd først, men
+    // MapLibre setter ikke `originalEvent` på dem her (verifisert i nettleser:
+    // hjul-zoom ga `zoomstart` med `originalEvent: undefined`). Vi lytter derfor
+    // på selve inndataene i stedet — de kan ikke forveksles med våre egne
+    // `easeTo`-kall. `touchstart` slår bare av ved to fingre eller flere; ett
+    // trykk kan være et klikk på en havn eller badeplass, og det skal ikke stoppe
+    // følgingen. Enkeltfinger-panorering fanges av `dragstart`.
+    const releaseFollow = () => {
+      followingLocationRef.current = false;
+      setFollowingLocation(false);
+    };
+    const releaseFollowOnMultiTouch = (event: TouchEvent) => {
+      if (event.touches.length < 2) return;
+      releaseFollow();
+    };
+
+    // Så lenge fingeren står på kartet skal vi ikke røre kameraet i det hele
+    // tatt. Følgingen animerer nesten sammenhengende (én ease per GPS-fiks,
+    // omtrent like lang som intervallet mellom fiksene), og en pågående
+    // programmatisk animasjon spiser de første framene av gesten — det var
+    // derfor panorering «ikke tok» før etter en stund. `map.stop()` avbryter
+    // animasjonen med én gang, slik at MapLibre sine egne håndterere eier
+    // kameraet fra første frame og `dragstart` faktisk rekker å fyre.
+    const beginPointerInteraction = () => {
+      pointerActiveRef.current = true;
+      map.stop();
+    };
+    const endPointerInteraction = () => {
+      pointerActiveRef.current = false;
+    };
+
+    map.on("dragstart", releaseFollow);
+    const canvasContainer = map.getCanvasContainer();
+    canvasContainer.addEventListener("wheel", releaseFollow, { passive: true });
+    canvasContainer.addEventListener("dblclick", releaseFollow);
+    canvasContainer.addEventListener("touchstart", releaseFollowOnMultiTouch, {
+      passive: true,
+    });
+    canvasContainer.addEventListener("mousedown", beginPointerInteraction);
+    canvasContainer.addEventListener("touchstart", beginPointerInteraction, {
+      passive: true,
+    });
+    // Slutten fanges på window: fingeren eller musa slippes ofte utenfor kartet.
+    window.addEventListener("mouseup", endPointerInteraction);
+    window.addEventListener("touchend", endPointerInteraction);
+    window.addEventListener("touchcancel", endPointerInteraction);
     const syncMapBearing = () => setMapBearing(normalizeBearing(map.getBearing()));
     map.on("rotate", syncMapBearing);
     map.on("move", syncMapBearing);
@@ -3170,7 +3252,13 @@ function NavigationApp() {
     const markerEl = document.createElement("div");
     markerEl.className = "ownship-marker";
     markerEl.innerHTML = OWNSHIP_MARKER_SVG;
-    markerRef.current = new maplibregl.Marker({ element: markerEl })
+    markerRef.current = new maplibregl.Marker({
+      element: markerEl,
+      // Default for markører er `viewport`. Med `map` roterer markøren sammen
+      // med kartet, slik at `setRotation()` kan ta imot kurs i geografiske
+      // grader og båten peker rett både i nord-opp og kurs-opp.
+      rotationAlignment: "map",
+    })
       .setLngLat(OSLO_FJORD)
       .addTo(map);
     mapRef.current = map;
@@ -3205,6 +3293,21 @@ function NavigationApp() {
       }
       map.off("rotate", syncMapBearing);
       map.off("move", syncMapBearing);
+      map.off("dragstart", releaseFollow);
+      canvasContainer.removeEventListener("wheel", releaseFollow);
+      canvasContainer.removeEventListener("dblclick", releaseFollow);
+      canvasContainer.removeEventListener(
+        "touchstart",
+        releaseFollowOnMultiTouch,
+      );
+      canvasContainer.removeEventListener("mousedown", beginPointerInteraction);
+      canvasContainer.removeEventListener(
+        "touchstart",
+        beginPointerInteraction,
+      );
+      window.removeEventListener("mouseup", endPointerInteraction);
+      window.removeEventListener("touchend", endPointerInteraction);
+      window.removeEventListener("touchcancel", endPointerInteraction);
       map.remove();
       mapRef.current = null;
       setMapReady(false);
@@ -3425,25 +3528,65 @@ function NavigationApp() {
     };
   }, []);
 
+  // Holder padding-cachen fersk og etterjusterer utsnittet når panelet endrer
+  // størrelse. Instrumentpanelet vokser og krymper med skuffer, orientering og
+  // nettleserens adresselinje, så `resize` alene fanger det ikke — derav
+  // ResizeObserver på selve panelet.
   useEffect(() => {
-    if (!followingLocation || !fix) return;
-
-    const handleViewportChange = () => {
+    const refreshPadding = () => {
+      mapPaddingRef.current = getVisibleMapPadding();
       const map = mapRef.current;
-      if (!map) return;
+      if (!map || !followingLocationRef.current) return;
+      const current = lastFixRef.current;
+      if (!current) return;
       map.easeTo({
-        center: [fix.longitude, fix.latitude],
-        padding: getVisibleMapPadding(),
+        center: [current.longitude, current.latitude],
+        padding: mapPaddingRef.current,
         duration: 250,
       });
     };
 
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("orientationchange", handleViewportChange);
+    refreshPadding();
+    window.addEventListener("resize", refreshPadding);
+    window.addEventListener("orientationchange", refreshPadding);
+
+    const panel = document.querySelector<HTMLElement>(".readout-panel");
+    const observer =
+      panel && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(refreshPadding)
+        : null;
+    observer?.observe(panel as HTMLElement);
+
     return () => {
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("orientationchange", handleViewportChange);
+      window.removeEventListener("resize", refreshPadding);
+      window.removeEventListener("orientationchange", refreshPadding);
+      observer?.disconnect();
     };
+  }, []);
+
+  // Kameraet følger båten én gang per reell GPS-fiks, ikke per
+  // interpolasjonsframe. Tidligere kalte `setPositionOnMap` `jumpTo` opptil 60
+  // ganger i sekundet; berøringsgester regnes relativt til der gesten startet,
+  // så kartet spratt tilbake for hver frame og lot seg verken dra eller zoome.
+  //
+  // Zoom settes bevisst ikke her. Minstezoom hører hjemme i den eksplisitte
+  // «sentrer»-handlingen — ellers kan man ikke zoome ut mens følging er på.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !fix || !followingLocation || !followingLocationRef.current) {
+      return;
+    }
+    if (pointerActiveRef.current) return;
+    if (performance.now() < cameraLockUntilRef.current) return;
+    map.easeTo({
+      center: [fix.longitude, fix.latitude],
+      bearing: northUpRef.current ? 0 : (fix.heading ?? map.getBearing()),
+      padding: mapPaddingRef.current,
+      // Matcher interpolasjonen av markøren, slik at båten holder seg i ro i
+      // forhold til kartet i stedet for å skli fram og tilbake mot sentrum.
+      duration: FIX_ANIMATION_DURATION_MS,
+      easing: (t) => t,
+    });
   }, [fix, followingLocation]);
 
   useEffect(() => {
@@ -3951,13 +4094,17 @@ function NavigationApp() {
     if (!map) return;
 
     if (!followingLocation) {
+      followingLocationRef.current = true;
       setFollowingLocation(true);
       if (fix) {
+        // Minstezoom hører hjemme her, i den eksplisitte «sentrer»-handlingen,
+        // og ikke i den løpende følgingen.
+        cameraLockUntilRef.current = performance.now() + 600;
         map.easeTo({
           center: [fix.longitude, fix.latitude],
           zoom: Math.max(map.getZoom(), 13),
           bearing: northUp ? 0 : (fix.heading ?? map.getBearing()),
-          padding: getVisibleMapPadding(),
+          padding: mapPaddingRef.current,
           duration: 600,
         });
       }
@@ -3966,9 +4113,11 @@ function NavigationApp() {
 
     setNorthUp((value) => {
       const nextNorthUp = !value;
+      northUpRef.current = nextNorthUp;
+      cameraLockUntilRef.current = performance.now() + 500;
       map.easeTo({
         bearing: nextNorthUp ? 0 : (fix?.heading ?? map.getBearing()),
-        padding: getVisibleMapPadding(),
+        padding: mapPaddingRef.current,
         duration: 500,
       });
       return nextNorthUp;

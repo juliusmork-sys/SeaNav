@@ -2934,16 +2934,26 @@ function NavigationApp() {
       releaseFollow();
     };
 
-    // Så lenge fingeren står på kartet skal vi ikke røre kameraet i det hele
-    // tatt. Følgingen animerer nesten sammenhengende (én ease per GPS-fiks,
-    // omtrent like lang som intervallet mellom fiksene), og en pågående
-    // programmatisk animasjon spiser de første framene av gesten — det var
-    // derfor panorering «ikke tok» før etter en stund. `map.stop()` avbryter
-    // animasjonen med én gang, slik at MapLibre sine egne håndterere eier
-    // kameraet fra første frame og `dragstart` faktisk rekker å fyre.
+    // Så lenge fingeren står på kartet skal følge-effekten ikke starte noen ny
+    // kamerabevegelse. Flagget alene er nok: MapLibre avbryter selv en pågående
+    // `easeTo` trygt idet en gest blir aktiv (internt `_stop(true)`, som lar
+    // håndtererne stå urørt).
+    //
+    // Historikk: her sto tidligere også et eksplisitt `map.stop()`-kall, i troen
+    // på at det trengtes for å rydde unna animasjonen før gesten startet. Det
+    // gjorde det motsatte — `map.stop()` (uten argumenter) kaller internt
+    // `handlers.stop(false)`, som nullstiller *alle* håndterere, ikke bare
+    // animasjonen. Siden denne lytteren er registrert etter MapLibres egen på
+    // samme element (bubble-rekkefølge), landet kallet rett etter at MapLibre
+    // nettopp hadde satt opp dra-tilstanden på mousedown/touchstart — og visket
+    // den ut igjen før første bevegelse. Resultat: panorering døde momentant på
+    // desktop, og på mobil rammet det pan, zoom og rotasjon samtidig siden alle
+    // initialiseres på touchstart. Verifisert i kildekoden
+    // (node_modules/maplibre-gl): `HandlerManager.stop()` har en vakt
+    // `if (this._updatingCamera) return`, som beskytter mot akkurat dette når
+    // kallet kommer fra MapLibre selv — men ikke når det kommer utenfra, som her.
     const beginPointerInteraction = () => {
       pointerActiveRef.current = true;
-      map.stop();
     };
     const endPointerInteraction = () => {
       pointerActiveRef.current = false;

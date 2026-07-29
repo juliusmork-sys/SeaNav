@@ -5065,8 +5065,13 @@ button {
 
 .weather-card-metric-value {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
+  /* Tidevann har ingen pil-ikon som de tre andre målingene. Med
+     `align-items: baseline` fikk teksten et annet ankerpunkt uten ikonet
+     å måle mot, og flo/fjære-verdien havnet noen piksler høyere enn resten.
+     `min-height` låser raden til pilikonets høyde uansett. */
+  min-height: 13px;
 }
 
 .weather-card-metric-value strong {

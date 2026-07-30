@@ -2638,6 +2638,33 @@ function NavigationApp() {
   }, [language]);
 
   useEffect(() => {
+    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+    let sentinel: WakeLockSentinel | null = null;
+
+    const acquire = async () => {
+      try {
+        sentinel = await navigator.wakeLock.request("screen");
+      } catch {
+        // Nettbrett/mobil kan avslå (strømsparing e.l.) — ufarlig å hoppe over.
+      }
+    };
+
+    // Spec'en slipper wake locken automatisk når fanen skjules, så den må
+    // hentes på nytt når brukeren kommer tilbake til appen.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") acquire();
+    };
+
+    acquire();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      sentinel?.release().catch(() => {});
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     const updateMobileChromeOffset = () => {

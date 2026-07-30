@@ -368,7 +368,7 @@ type CameraPadding = {
 
 const DEFAULT_VIPPS_PAYMENT_URL = "https://qr.vipps.no/vp/nCQjy9dcM";
 const VIPPS_QR_IMAGE_URL = "/vipps-qr.png";
-const HERO_IMAGE_URL = "/seanav-hero.png";
+const HERO_IMAGE_URL = "/seanav-hero.webp";
 const LOGO_IMAGE_URL = "/app-icon-512.png";
 
 const UI_TEXT = {
@@ -471,6 +471,7 @@ const UI_TEXT = {
     paymentQrTitle: "Vipps QR-kode",
     paymentQrDescription:
       "SeaNav er helt gratis å bruke for alle. Vi blir derimot veldig glade for valgfritt bidrag for å støtte videre utvikling.",
+    paymentTerms: "Avtalevilkår for betaling",
     closeSeaMarks: "Lukk sjømerker",
     seaMarksTitle: "Sjømerker",
     seaMarksSubtitle: "Norge bruker IALA region A.",
@@ -763,6 +764,7 @@ const UI_TEXT = {
     paymentQrTitle: "Vipps QR code",
     paymentQrDescription:
       "SeaNav is free for everyone to use. Optional contributions to support further development are greatly appreciated.",
+    paymentTerms: "Payment terms",
     closeSeaMarks: "Close sea marks",
     seaMarksTitle: "Sea marks",
     seaMarksSubtitle: "Norway uses IALA region A.",
@@ -2304,7 +2306,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
       <section className="landing-principles" id="slik-virker-det">
         <div className="landing-section-intro">
           <p>Bygget for norske farvann</p>
-          <h2>Sjøkart, posisjon og havner – alt i én app.</h2>
+          <h2>Sjøkart, vær, tidevann og havner – alt i én app.</h2>
         </div>
 
         <div className="landing-principle-grid">
@@ -2321,6 +2323,22 @@ function LandingPage({ onStart }: { onStart: () => void }) {
             </span>
             <h3>Posisjon, fart og kurs</h3>
             <p>Se hvor du er i sanntid, med fart over grunn og kurs – i én ryddig visning.</p>
+          </article>
+          <article className="landing-principle-card--new">
+            <span className="landing-principle-badge">Ny</span>
+            <span className="landing-principle-icon">
+              <CloudSun size={30} />
+            </span>
+            <h3>Vær og tidevann</h3>
+            <p>Sjøtemperatur, vind og bølger, pluss høyvann og lavvann – rett i instrumentpanelet.</p>
+          </article>
+          <article className="landing-principle-card--new">
+            <span className="landing-principle-badge">Ny</span>
+            <span className="landing-principle-icon">
+              <Compass size={30} />
+            </span>
+            <h3>Lås kart til Nord</h3>
+            <p>Bytt mellom nord-opp og kurs-opp med ett trykk – kartet roterer med baugen når du følger kurs.</p>
           </article>
           <article>
             <span className="landing-principle-icon">
@@ -5074,6 +5092,13 @@ function NavigationApp() {
                   <strong>{text.paymentQrTitle}</strong>
                   <small>{text.paymentQrDescription}</small>
                 </span>
+              </a>
+              <a
+                className="payment-terms-link"
+                href="/avtalevilkar/"
+                rel="nofollow noopener"
+              >
+                {text.paymentTerms}
               </a>
             </div>
           )}

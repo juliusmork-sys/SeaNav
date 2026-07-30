@@ -454,11 +454,28 @@ button {
 }
 
 .landing-principle-grid article {
+  position: relative;
   min-width: 0;
   padding: 30px 30px 32px;
   background: #fff;
   border: 1px solid var(--sea-hairline);
   border-radius: 14px;
+}
+
+.landing-principle-card--new {
+  border-color: var(--sea-azure-deep);
+}
+
+.landing-principle-badge {
+  position: absolute;
+  top: -11px;
+  right: 20px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--sea-ice-soft);
+  color: var(--sea-azure-deep);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .landing-principle-icon {
@@ -1457,6 +1474,16 @@ button {
   font-size: 0.68rem;
   font-weight: 760;
   line-height: 1.25;
+}
+
+.payment-terms-link {
+  display: block;
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  color: rgba(223, 245, 251, 0.72);
+  font-size: 0.68rem;
+  text-align: center;
+  text-decoration: underline;
 }
 
 .sea-marks-modal {

@@ -1342,9 +1342,15 @@ function getVisibleMapPadding(): CameraPadding {
   const portrait = window.matchMedia(
     "(max-width: 820px) and (orientation: portrait)",
   ).matches;
+  // Desktop: fast venstre kolonne, samme side som mobil landskapsmodus —
+  // kartet må derfor puffes til høyre på samme måte, ellers sentrerer
+  // kameraet seg under kolonnen i stedet for i det synlige kartområdet.
+  const desktopColumn = window.matchMedia(
+    "(min-width: 821px) and (min-height: 541px)",
+  ).matches;
   const gutter = 16;
 
-  if (landscape) {
+  if (landscape || desktopColumn) {
     return {
       top: 0,
       right: 0,
@@ -2526,6 +2532,12 @@ function NavigationApp() {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 820px) and (orientation: portrait)").matches;
   });
+  // Desktop/nettbrett-liggende: samme grense som brukes i styles.css for å gi
+  // en fast venstre kolonne i stedet for flytende paneler over kartet.
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(min-width: 821px) and (min-height: 541px)").matches;
+  });
   const [harborMapOpen, setHarborMapOpen] = useState<Harbor | null>(null);
   const [seaMarksOpen, setSeaMarksOpen] = useState(false);
   const [gpsHelpOpen, setGpsHelpOpen] = useState(false);
@@ -2628,6 +2640,16 @@ function NavigationApp() {
       "(max-width: 820px) and (orientation: portrait)",
     );
     const handleChange = () => setIsPortrait(query.matches);
+    handleChange();
+    query.addEventListener("change", handleChange);
+    return () => query.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia(
+      "(min-width: 821px) and (min-height: 541px)",
+    );
+    const handleChange = () => setIsDesktop(query.matches);
     handleChange();
     query.addEventListener("change", handleChange);
     return () => query.removeEventListener("change", handleChange);
@@ -4688,7 +4710,10 @@ function NavigationApp() {
   // Følger værkortets *monterte* tilstand, ikke `weatherOpen`: ellers ville
   // presis posisjon hoppe ut av .map-top-cluster i samme øyeblikk værkortet
   // begynner å tone ut, og vi ville sett den flytte seg under animasjonen.
-  const coordinatePanelInline = weatherCardPresence.mounted && !isPortrait;
+  // På desktop vises presis posisjon aldri som eget kort — lat/lon står
+  // allerede i instrumentpanelet, så et eget kort ville bare dublisert det.
+  const coordinatePanelInline =
+    !isDesktop && weatherCardPresence.mounted && !isPortrait;
   const coordinatePanel = coordinatePanelPresence.mounted && (
     <section
       className={`${coordinatePanelInline ? "coordinate-panel coordinate-panel-inline" : "coordinate-panel"} ${coordinatePanelPresence.className}`}
@@ -4704,6 +4729,178 @@ function NavigationApp() {
     </section>
   );
 
+  const brandMark = (
+    <>
+      <img className="brand-logo" src={LOGO_IMAGE_URL} alt="" />
+      <div>
+        <strong>SeaNav</strong>
+        <span>{text.brandSubtitle}</span>
+      </div>
+    </>
+  );
+
+  // Beregnes én gang og gjenbrukes på begge steder værkortet kan vises
+  // (flytende over kartet, eller inne i venstrekolonnen på desktop) — de to
+  // stedene er alltid gjensidig utelukkende via `isDesktop`.
+  const weatherCard = weatherCardPresence.mounted && (() => {
+    const SymbolIcon = weatherSymbolIcon(weather.symbolCode);
+    const windArrow = weatherFlowArrowDegrees(weather.windDirection, "from");
+    const waveArrow = weatherFlowArrowDegrees(weather.waveDirection, "from");
+    const currentArrow = weatherFlowArrowDegrees(weather.currentDirection, "to");
+    const forecastUrl = fix && buildYrForecastUrl(fix.latitude, fix.longitude, language);
+
+    return (
+      <button
+        type="button"
+        className={`weather-card map-weather-card ${weatherCardPresence.className}`}
+        aria-label={fix ? `${text.weatherHere} — ${text.weatherOpenForecast}` : text.weatherHere}
+        disabled={!forecastUrl}
+        onClick={() => {
+          if (forecastUrl) window.open(forecastUrl, "_blank", "noopener,noreferrer");
+        }}
+      >
+        <div className="weather-card-symbol">
+          <SymbolIcon size={22} />
+          {weather.temperature !== null && (
+            <strong>{Math.round(weather.temperature)}°</strong>
+          )}
+        </div>
+        {!fix ? (
+          <p className="weather-card-message">{text.weatherWaiting}</p>
+        ) : weather.status === "error" ? (
+          <p className="weather-card-message">{text.weatherUnavailable}</p>
+        ) : (
+          <div className="weather-card-metrics" aria-busy={weather.status === "loading"}>
+            <div className="weather-card-metric">
+              <div className="weather-card-metric-label">
+                <Wind size={14} />
+                <span>{text.wind}</span>
+              </div>
+              <div className="weather-card-metric-value">
+                <strong>{formatWeatherValue(weather.windSpeed, "m/s")}</strong>
+                {windArrow !== null && (
+                  <ArrowUp size={13} style={{ transform: `rotate(${windArrow}deg)` }} />
+                )}
+              </div>
+            </div>
+            <div className="weather-card-metric">
+              <div className="weather-card-metric-label">
+                <Waves size={14} />
+                <span>{text.waves}</span>
+              </div>
+              <div className="weather-card-metric-value">
+                <strong>{formatWeatherValue(weather.waveHeight, "m")}</strong>
+                {waveArrow !== null && (
+                  <ArrowUp size={13} style={{ transform: `rotate(${waveArrow}deg)` }} />
+                )}
+              </div>
+            </div>
+            <div className="weather-card-metric">
+              <div className="weather-card-metric-label">
+                <CurrentArrowsIcon size={14} />
+                <span>{text.current}</span>
+              </div>
+              <div className="weather-card-metric-value">
+                <strong>{formatWeatherValue(weather.currentSpeed, "m/s")}</strong>
+                {currentArrow !== null && (
+                  <ArrowUp size={13} style={{ transform: `rotate(${currentArrow}deg)` }} />
+                )}
+              </div>
+            </div>
+            {tideNow && (
+              <div className="weather-card-metric">
+                <div className="weather-card-metric-label">
+                  <TideIcon rising={tideNow.rising} size={14} />
+                  <span>
+                    {tideNow.rising ? text.tideHigh : text.tideLow}
+                  </span>
+                </div>
+                <div
+                  className="weather-card-metric-value"
+                  aria-busy={tide.status === "loading"}
+                >
+                  <strong>
+                    {formatClockTime(tideNow.next.time, language)}
+                  </strong>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {tideStripPresence.mounted && tideNow && tideCurve && (
+          <div className={`weather-card-tide ${tideStripPresence.className}`}>
+            <svg
+              className="tide-spark"
+              viewBox={tideCurve.viewBox}
+              aria-hidden="true"
+            >
+              <path className="tide-spark-full" d={tideCurve.full} />
+              <path className="tide-spark-passed" d={tideCurve.passed} />
+              <circle
+                className="tide-spark-now"
+                cx={tideCurve.now.x}
+                cy={tideCurve.now.y}
+                r={2.8}
+              />
+            </svg>
+            <div className="weather-card-tide-now">
+              <span className="weather-card-metric-label">
+                {tide.station
+                  ? `${text.tideNow} · ${tide.station}`
+                  : text.tideNow}
+              </span>
+              <strong>{formatTideLevel(tideNow.level, depthUnit)}</strong>
+            </div>
+            <div className="weather-card-tide-events">
+              <span>
+                <em>{tideNow.rising ? text.tideHigh : text.tideLow}</em>
+                {` ${formatClockTime(tideNow.next.time, language)} · ${formatTideLevel(tideNow.next.value, depthUnit)}`}
+              </span>
+              {tideNow.following && (
+                <span>
+                  <em>{tideNow.rising ? text.tideLow : text.tideHigh}</em>
+                  {` ${formatClockTime(tideNow.following.time, language)} · ${formatTideLevel(tideNow.following.value, depthUnit)}`}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </button>
+    );
+  })();
+
+  // Beregnes én gang og gjenbrukes to steder: øverst i venstrekolonnen på
+  // desktop (kortere vei til skuffen som popper opp ved toppen), nederst i
+  // instrumentblokken på mobil/nettbrett (uendret plassering der).
+  const panelActions = (
+    <div className="panel-actions">
+      <button
+        type="button"
+        className={displayOpen ? "active" : ""}
+        onClick={() => {
+          setDisplayOpen((value) => !value);
+          setControlsOpen(false);
+        }}
+        title={text.showDisplayOptions}
+      >
+        {displayOpen ? <X size={18} /> : <SlidersHorizontal size={18} />}
+        <span>{text.settings}</span>
+      </button>
+      <button
+        type="button"
+        className={controlsOpen ? "active" : ""}
+        onClick={() => {
+          setControlsOpen((value) => !value);
+          setDisplayOpen(false);
+        }}
+        title={text.showNavigationControls}
+      >
+        {controlsOpen ? <X size={18} /> : <Layers size={18} />}
+        <span>{text.navLayers}</span>
+      </button>
+    </div>
+  );
+
   return (
     <main
       className={
@@ -4715,145 +4912,20 @@ function NavigationApp() {
       <div ref={mapContainer} className="map" aria-label={text.navigationMap} />
 
       <section className="topbar" aria-label={text.navigationStatus}>
-        <div className="brand" aria-label="SeaNav">
-          <img className="brand-logo" src={LOGO_IMAGE_URL} alt="" />
-          <div>
-            <strong>SeaNav</strong>
-            <span>{text.brandSubtitle}</span>
+        {!isDesktop && (
+          <div className="brand" aria-label="SeaNav">
+            {brandMark}
           </div>
-        </div>
+        )}
       </section>
 
       <div className="map-center-overlays">
-      {weatherCardPresence.mounted && (() => {
-        const SymbolIcon = weatherSymbolIcon(weather.symbolCode);
-        const windArrow = weatherFlowArrowDegrees(weather.windDirection, "from");
-        const waveArrow = weatherFlowArrowDegrees(weather.waveDirection, "from");
-        const currentArrow = weatherFlowArrowDegrees(weather.currentDirection, "to");
-        const forecastUrl = fix && buildYrForecastUrl(fix.latitude, fix.longitude, language);
-
-        return (
-          <div className="map-top-cluster">
-            <button
-              type="button"
-              className={`weather-card map-weather-card ${weatherCardPresence.className}`}
-              aria-label={fix ? `${text.weatherHere} — ${text.weatherOpenForecast}` : text.weatherHere}
-              disabled={!forecastUrl}
-              onClick={() => {
-                if (forecastUrl) window.open(forecastUrl, "_blank", "noopener,noreferrer");
-              }}
-            >
-              <div className="weather-card-symbol">
-                <SymbolIcon size={22} />
-                {weather.temperature !== null && (
-                  <strong>{Math.round(weather.temperature)}°</strong>
-                )}
-              </div>
-              {!fix ? (
-                <p className="weather-card-message">{text.weatherWaiting}</p>
-              ) : weather.status === "error" ? (
-                <p className="weather-card-message">{text.weatherUnavailable}</p>
-              ) : (
-                <div className="weather-card-metrics" aria-busy={weather.status === "loading"}>
-                  <div className="weather-card-metric">
-                    <div className="weather-card-metric-label">
-                      <Wind size={14} />
-                      <span>{text.wind}</span>
-                    </div>
-                    <div className="weather-card-metric-value">
-                      <strong>{formatWeatherValue(weather.windSpeed, "m/s")}</strong>
-                      {windArrow !== null && (
-                        <ArrowUp size={13} style={{ transform: `rotate(${windArrow}deg)` }} />
-                      )}
-                    </div>
-                  </div>
-                  <div className="weather-card-metric">
-                    <div className="weather-card-metric-label">
-                      <Waves size={14} />
-                      <span>{text.waves}</span>
-                    </div>
-                    <div className="weather-card-metric-value">
-                      <strong>{formatWeatherValue(weather.waveHeight, "m")}</strong>
-                      {waveArrow !== null && (
-                        <ArrowUp size={13} style={{ transform: `rotate(${waveArrow}deg)` }} />
-                      )}
-                    </div>
-                  </div>
-                  <div className="weather-card-metric">
-                    <div className="weather-card-metric-label">
-                      <CurrentArrowsIcon size={14} />
-                      <span>{text.current}</span>
-                    </div>
-                    <div className="weather-card-metric-value">
-                      <strong>{formatWeatherValue(weather.currentSpeed, "m/s")}</strong>
-                      {currentArrow !== null && (
-                        <ArrowUp size={13} style={{ transform: `rotate(${currentArrow}deg)` }} />
-                      )}
-                    </div>
-                  </div>
-                  {tideNow && (
-                    <div className="weather-card-metric">
-                      <div className="weather-card-metric-label">
-                        <TideIcon rising={tideNow.rising} size={14} />
-                        <span>
-                          {tideNow.rising ? text.tideHigh : text.tideLow}
-                        </span>
-                      </div>
-                      <div
-                        className="weather-card-metric-value"
-                        aria-busy={tide.status === "loading"}
-                      >
-                        <strong>
-                          {formatClockTime(tideNow.next.time, language)}
-                        </strong>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              {tideStripPresence.mounted && tideNow && tideCurve && (
-                <div className={`weather-card-tide ${tideStripPresence.className}`}>
-                  <svg
-                    className="tide-spark"
-                    viewBox={tideCurve.viewBox}
-                    aria-hidden="true"
-                  >
-                    <path className="tide-spark-full" d={tideCurve.full} />
-                    <path className="tide-spark-passed" d={tideCurve.passed} />
-                    <circle
-                      className="tide-spark-now"
-                      cx={tideCurve.now.x}
-                      cy={tideCurve.now.y}
-                      r={2.8}
-                    />
-                  </svg>
-                  <div className="weather-card-tide-now">
-                    <span className="weather-card-metric-label">
-                      {tide.station
-                        ? `${text.tideNow} · ${tide.station}`
-                        : text.tideNow}
-                    </span>
-                    <strong>{formatTideLevel(tideNow.level, depthUnit)}</strong>
-                  </div>
-                  <div className="weather-card-tide-events">
-                    <span>
-                      <em>{tideNow.rising ? text.tideHigh : text.tideLow}</em>
-                      {` ${formatClockTime(tideNow.next.time, language)} · ${formatTideLevel(tideNow.next.value, depthUnit)}`}
-                    </span>
-                    {tideNow.following && (
-                      <span>
-                        <em>{tideNow.rising ? text.tideLow : text.tideHigh}</em>
-                        {` ${formatClockTime(tideNow.following.time, language)} · ${formatTideLevel(tideNow.following.value, depthUnit)}`}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </button>
-            {coordinatePanelInline && coordinatePanel}
-          </div>
-        );
-      })()}
+      {!isDesktop && weatherCardPresence.mounted && (
+        <div className="map-top-cluster">
+          {weatherCard}
+          {coordinatePanelInline && coordinatePanel}
+        </div>
+      )}
 
       {gpsAlertPresence.mounted && gpsIssueShown && (
         <div className={`gps-alert ${gpsAlertPresence.className}`} role="alert">
@@ -4906,8 +4978,16 @@ function NavigationApp() {
       </div>
 
       <div className="bottom-dock">
-      {!coordinatePanelInline && coordinatePanel}
+      {!isDesktop && !coordinatePanelInline && coordinatePanel}
       <section className="readout-panel" aria-label={text.liveNavigationData}>
+        {isDesktop && (
+          <div className="panel-brand" aria-label="SeaNav">
+            {brandMark}
+          </div>
+        )}
+        {isDesktop && panelActions}
+        {isDesktop && weatherCard}
+        <div className="panel-instruments">
           <div className="readout instrument-pair primary-depth">
             <button
               type="button"
@@ -4950,14 +5030,16 @@ function NavigationApp() {
             </button>
             <Waves size={28} />
           </div>
-          <div className="readout-grid coordinate-readouts">
-            {readouts.slice(0, 2).map((item) => (
-              <div className="readout" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
+          {showPrecisePosition && (
+            <div className="readout-grid coordinate-readouts">
+              {readouts.slice(0, 2).map((item) => (
+                <div className="readout" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="readout-grid motion-readouts">
             <div className="readout instrument-pair motion-readout">
@@ -5042,32 +5124,7 @@ function NavigationApp() {
             </span>
           </button>
 
-          <div className="panel-actions">
-            <button
-              type="button"
-              className={displayOpen ? "active" : ""}
-              onClick={() => {
-                setDisplayOpen((value) => !value);
-                setControlsOpen(false);
-              }}
-              title={text.showDisplayOptions}
-            >
-              {displayOpen ? <X size={18} /> : <SlidersHorizontal size={18} />}
-              <span>{text.settings}</span>
-            </button>
-            <button
-              type="button"
-              className={controlsOpen ? "active" : ""}
-              onClick={() => {
-                setControlsOpen((value) => !value);
-                setDisplayOpen(false);
-              }}
-              title={text.showNavigationControls}
-            >
-              {controlsOpen ? <X size={18} /> : <Layers size={18} />}
-              <span>{text.navLayers}</span>
-            </button>
-          </div>
+          {!isDesktop && panelActions}
 
           {displayDrawerPresence.mounted && (
             <div className={`panel-drawer display-drawer ${displayDrawerPresence.className}`}>
@@ -5200,7 +5257,8 @@ function NavigationApp() {
               <span>{text.safetyNoticeText}</span>
             </div>
           )}
-        </section>
+        </div>
+      </section>
       </div>
 
       {harborMapPresence.mounted && harborMapShown && (

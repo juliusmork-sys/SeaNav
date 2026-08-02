@@ -66,6 +66,11 @@ const BEACH_ENDPOINT =
 const DEFAULT_RADIUS_METERS = 2000;
 const MAX_RADIUS_METERS = 10000;
 
+// Neon-compute kan autosuspende ved inaktivitet; første query etter idle vekker
+// den, noe som kan ta flere sekunder. Uten dette dør requesten på plattformens
+// default-grense midt i en vanlig cold start i stedet for å bare vente den ut.
+export const config = { maxDuration: 30 };
+
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
 function parseNumber(value: string | string[] | undefined) {

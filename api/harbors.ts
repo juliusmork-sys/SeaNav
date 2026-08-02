@@ -43,6 +43,11 @@ const OVERPASS_ENDPOINTS = [
 const DEFAULT_RADIUS_METERS = 2000;
 const MAX_RADIUS_METERS = 10000;
 
+// Neon-compute kan autosuspende ved inaktivitet; første query etter idle vekker
+// den, noe som kan ta flere sekunder. Uten dette dør requesten på plattformens
+// default-grense midt i en vanlig cold start i stedet for å bare vente den ut.
+export const config = { maxDuration: 30 };
+
 function parseNumber(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return null;

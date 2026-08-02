@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import maplibregl, { Map } from "maplibre-gl";
 import {
@@ -620,6 +620,8 @@ const UI_TEXT = {
     weatherWaiting: "Venter på GPS-posisjon",
     weatherUnavailable: "Værdata er ikke tilgjengelig akkurat nå.",
     weatherOpenForecast: "Åpne værmelding for posisjonen på yr.no",
+    weatherOpenWind: "Åpne vindkart for posisjonen på yr.no",
+    weatherOpenCoast: "Åpne kystvarsel for posisjonen på yr.no",
     wind: "Vind",
     waves: "Bølger",
     current: "Strøm",
@@ -913,6 +915,8 @@ const UI_TEXT = {
     weatherWaiting: "Waiting for GPS position",
     weatherUnavailable: "Weather data is unavailable right now.",
     weatherOpenForecast: "Open the forecast for this position on yr.no",
+    weatherOpenWind: "Open the wind map for this position on yr.no",
+    weatherOpenCoast: "Open the coastal forecast for this position on yr.no",
     wind: "Wind",
     waves: "Waves",
     current: "Current",
@@ -1256,8 +1260,47 @@ const WEATHER_SYMBOL_ICONS: Record<string, ComponentType<{ size?: number }>> = {
 function buildYrForecastUrl(latitude: number, longitude: number, language: Language) {
   const coords = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
   return language === "no"
-    ? `https://www.yr.no/nb/detaljert/graf/${coords}`
+    ? `https://www.yr.no/nb/værvarsel/graf/${coords}`
     : `https://www.yr.no/en/forecast/graph/${coords}`;
+}
+
+function buildYrWindMapUrl(latitude: number, longitude: number, language: Language) {
+  const coords = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+  return language === "no"
+    ? `https://www.yr.no/nb/kart/vind/${coords}`
+    : `https://www.yr.no/en/map/wind/${coords}`;
+}
+
+function buildYrCoastForecastUrl(latitude: number, longitude: number, language: Language) {
+  const coords = `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+  return language === "no"
+    ? `https://www.yr.no/nb/kyst/graf/${coords}`
+    : `https://www.yr.no/en/coast/graph/${coords}`;
+}
+
+function WeatherCardZone({
+  url,
+  className,
+  ariaLabel,
+  children,
+}: {
+  url: string | null;
+  className: string;
+  ariaLabel: string;
+  children: ReactNode;
+}) {
+  if (!url) return <div className={className}>{children}</div>;
+  return (
+    <a
+      className={className}
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={ariaLabel}
+    >
+      {children}
+    </a>
+  );
 }
 
 function weatherSymbolIcon(symbolCode: string | null) {
@@ -2003,8 +2046,11 @@ async function fetchNearbyBeaches(
   longitude: number,
   radiusMeters = 2000,
 ) {
+  // Grense litt under api/beaches.ts sin maxDuration (30s), slik at en
+  // hengende Neon-oppvåkning feiler ryddig i UI i stedet for å vente for alltid.
   const response = await fetch(
     `/api/beaches?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&radius=${encodeURIComponent(radiusMeters)}`,
+    { signal: AbortSignal.timeout(25000) },
   );
 
   if (!response.ok) {
@@ -2150,8 +2196,11 @@ async function fetchNearbyHarbors(
   longitude: number,
   radiusMeters = 2000,
 ) {
+  // Grense litt under api/harbors.ts sin maxDuration (30s), slik at en
+  // hengende Neon-oppvåkning feiler ryddig i UI i stedet for å vente for alltid.
   const response = await fetch(
     `/api/harbors?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&radius=${encodeURIComponent(radiusMeters)}`,
+    { signal: AbortSignal.timeout(25000) },
   );
   if (!response.ok) {
     throw new Error("Harbor service unavailable");
@@ -2863,8 +2912,17 @@ function NavigationApp() {
             setBeaches((current) => ({
               status: "ready",
               nearest: updateNearest ? result.nearest : current.nearest,
-              featureCollection: result.featureCollection,
-              markerFeatureCollection: result.markerFeatureCollection,
+              // GPS-fiks-kallet (updateNearest=true, fast 2000m-boble) skal kun
+              // oppdatere "nærmeste badeplass". Kartlaget styres utelukkende av
+              // kartutsnitt-kallet (updateNearest=false, opptil 10 km) — ellers
+              // klipper GPS-fiksen jevnlig kartlaget ned til en smal boble rundt
+              // båten og overskriver et bredere, korrekt kartutsnitt-resultat.
+              featureCollection: updateNearest
+                ? current.featureCollection
+                : result.featureCollection,
+              markerFeatureCollection: updateNearest
+                ? current.markerFeatureCollection
+                : result.markerFeatureCollection,
             }));
           })
           .catch(() => {
@@ -2885,7 +2943,10 @@ function NavigationApp() {
               nearest: updateNearest ? null : current.nearest,
             }));
           });
-      }, 300);
+        // Ingen debounce-verdi å beskytte mot ved førstegangskall (lastQuery
+        // er null) — vent bare ved oppfølgende kall, som faktisk kan komme tett
+        // ved panorering/GPS-tikk.
+      }, lastQuery ? 300 : 0);
     },
     [beachesVisible],
   );
@@ -2930,7 +2991,10 @@ function NavigationApp() {
             if (harborMapQueryRef.current?.timestamp !== requestedAt) return;
             setHarbors((current) => ({ ...current, status: "error" }));
           });
-      }, 300);
+        // Ingen debounce-verdi å beskytte mot ved førstegangskall (lastQuery
+        // er null) — vent bare ved oppfølgende kall, som faktisk kan komme tett
+        // ved panorering.
+      }, lastQuery ? 300 : 0);
     },
     [],
   );
@@ -4747,31 +4811,36 @@ function NavigationApp() {
     const windArrow = weatherFlowArrowDegrees(weather.windDirection, "from");
     const waveArrow = weatherFlowArrowDegrees(weather.waveDirection, "from");
     const currentArrow = weatherFlowArrowDegrees(weather.currentDirection, "to");
-    const forecastUrl = fix && buildYrForecastUrl(fix.latitude, fix.longitude, language);
+    const forecastUrl = fix ? buildYrForecastUrl(fix.latitude, fix.longitude, language) : null;
+    const windMapUrl = fix ? buildYrWindMapUrl(fix.latitude, fix.longitude, language) : null;
+    const coastUrl = fix ? buildYrCoastForecastUrl(fix.latitude, fix.longitude, language) : null;
 
     return (
-      <button
-        type="button"
+      <div
         className={`weather-card map-weather-card ${weatherCardPresence.className}`}
-        aria-label={fix ? `${text.weatherHere} — ${text.weatherOpenForecast}` : text.weatherHere}
-        disabled={!forecastUrl}
-        onClick={() => {
-          if (forecastUrl) window.open(forecastUrl, "_blank", "noopener,noreferrer");
-        }}
+        aria-label={text.weatherHere}
       >
-        <div className="weather-card-symbol">
+        <WeatherCardZone
+          url={forecastUrl}
+          className="weather-card-symbol"
+          ariaLabel={`${text.weatherHere} — ${text.weatherOpenForecast}`}
+        >
           <SymbolIcon size={22} />
           {weather.temperature !== null && (
             <strong>{Math.round(weather.temperature)}°</strong>
           )}
-        </div>
+        </WeatherCardZone>
         {!fix ? (
           <p className="weather-card-message">{text.weatherWaiting}</p>
         ) : weather.status === "error" ? (
           <p className="weather-card-message">{text.weatherUnavailable}</p>
         ) : (
           <div className="weather-card-metrics" aria-busy={weather.status === "loading"}>
-            <div className="weather-card-metric">
+            <WeatherCardZone
+              url={windMapUrl}
+              className="weather-card-metric"
+              ariaLabel={`${text.wind} — ${text.weatherOpenWind}`}
+            >
               <div className="weather-card-metric-label">
                 <Wind size={14} />
                 <span>{text.wind}</span>
@@ -4782,8 +4851,12 @@ function NavigationApp() {
                   <ArrowUp size={13} style={{ transform: `rotate(${windArrow}deg)` }} />
                 )}
               </div>
-            </div>
-            <div className="weather-card-metric">
+            </WeatherCardZone>
+            <WeatherCardZone
+              url={coastUrl}
+              className="weather-card-metric"
+              ariaLabel={`${text.waves} — ${text.weatherOpenCoast}`}
+            >
               <div className="weather-card-metric-label">
                 <Waves size={14} />
                 <span>{text.waves}</span>
@@ -4794,8 +4867,12 @@ function NavigationApp() {
                   <ArrowUp size={13} style={{ transform: `rotate(${waveArrow}deg)` }} />
                 )}
               </div>
-            </div>
-            <div className="weather-card-metric">
+            </WeatherCardZone>
+            <WeatherCardZone
+              url={coastUrl}
+              className="weather-card-metric"
+              ariaLabel={`${text.current} — ${text.weatherOpenCoast}`}
+            >
               <div className="weather-card-metric-label">
                 <CurrentArrowsIcon size={14} />
                 <span>{text.current}</span>
@@ -4806,9 +4883,13 @@ function NavigationApp() {
                   <ArrowUp size={13} style={{ transform: `rotate(${currentArrow}deg)` }} />
                 )}
               </div>
-            </div>
+            </WeatherCardZone>
             {tideNow && (
-              <div className="weather-card-metric">
+              <WeatherCardZone
+                url={coastUrl}
+                className="weather-card-metric"
+                ariaLabel={`${tideNow.rising ? text.tideHigh : text.tideLow} — ${text.weatherOpenCoast}`}
+              >
                 <div className="weather-card-metric-label">
                   <TideIcon rising={tideNow.rising} size={14} />
                   <span>
@@ -4823,12 +4904,16 @@ function NavigationApp() {
                     {formatClockTime(tideNow.next.time, language)}
                   </strong>
                 </div>
-              </div>
+              </WeatherCardZone>
             )}
           </div>
         )}
         {tideStripPresence.mounted && tideNow && tideCurve && (
-          <div className={`weather-card-tide ${tideStripPresence.className}`}>
+          <WeatherCardZone
+            url={coastUrl}
+            className={`weather-card-tide ${tideStripPresence.className}`}
+            ariaLabel={text.weatherOpenCoast}
+          >
             <svg
               className="tide-spark"
               viewBox={tideCurve.viewBox}
@@ -4863,9 +4948,9 @@ function NavigationApp() {
                 </span>
               )}
             </div>
-          </div>
+          </WeatherCardZone>
         )}
-      </button>
+      </div>
     );
   })();
 
@@ -5225,6 +5310,7 @@ function NavigationApp() {
                 type="button"
                 className={beachesVisible ? "active" : ""}
                 data-mode={beachDisplayMode}
+                aria-busy={beachesVisible && beaches.status === "loading"}
                 onClick={() =>
                   setBeachDisplayMode((mode) =>
                     mode === "off" ? "icons" : mode === "icons" ? "areas" : "off",
@@ -5238,6 +5324,7 @@ function NavigationApp() {
               <button
                 type="button"
                 className={harborsVisible ? "active" : ""}
+                aria-busy={harborsVisible && harbors.status === "loading"}
                 onClick={toggleHarbors}
                 title={text.harbors}
               >

@@ -5178,18 +5178,32 @@ button {
   color: #17313b;
   font: inherit;
   text-align: left;
-  appearance: none;
+}
+
+/* Kortet er ikke lenger én stor knapp — hver sone (vær/vind/bølger/strøm/
+   tidevann) er sin egen lenke til riktig side på yr.no, så hover/fokus må
+   vises per sone, ikke på hele kortet. */
+.weather-card-symbol,
+.weather-card-metric,
+.weather-card-tide {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.weather-card-symbol,
+a.weather-card-metric,
+a.weather-card-tide {
   cursor: pointer;
+  border-radius: 6px;
 }
 
-.weather-card:disabled {
-  cursor: default;
-}
-
-.weather-card:hover:not(:disabled),
-.weather-card:focus-visible {
-  border-color: rgba(0, 117, 144, 0.4);
-  background: rgba(246, 252, 253, 1);
+a.weather-card-symbol:hover,
+a.weather-card-symbol:focus-visible,
+a.weather-card-metric:hover,
+a.weather-card-metric:focus-visible,
+a.weather-card-tide:hover,
+a.weather-card-tide:focus-visible {
+  background: rgba(0, 117, 144, 0.1);
   outline: none;
 }
 
@@ -5864,6 +5878,13 @@ button {
 /* Sjøtemperaturen i badepopup-en hentes etter at kortet er åpnet, og skrives inn
    i det samme elementet. `aria-busy` fjernes i App.tsx når svaret er der. */
 .popup-water-temp strong[aria-busy="true"] {
+  animation: motion-breathe 1.4s var(--ease-emphasis) infinite;
+}
+
+/* Badeplass-/havnelag under henting: ikonet i lagvelgeren puster i stedet for
+   en spinner, samme mønster som instrumentene over. Fjerner "dukker plutselig
+   opp"-følelsen ved trege DB-svar (Neon cold start), uten ny UI-elementtype. */
+.embedded-controls button[aria-busy="true"] svg {
   animation: motion-breathe 1.4s var(--ease-emphasis) infinite;
 }
 
